@@ -1,6 +1,14 @@
 
 var assert = require("assert")
 
+function arrays_equal(a,b) { 
+	var ret = !(a<b || b<a)
+	if ( ret )
+		return ret
+	console.log(a, "!=", b)
+	return ret
+}
+
 _gsClipStart = 0
 _gsClipEnd = 4
 
@@ -22,16 +30,18 @@ describe('timelist', function() {
 })
 
 describe('notelist', function() {
-	it('should return the array of midi note', function() {
-		var x = notelist("C-0:C-5:C#5")
+	/*it('should return the array of midi note', function() {
+		var x = notelist("C-2:C3:C#3")
 		assert.equal(0, x[0])
 		assert.equal(60, x[1])
 		assert.equal(61, x[2])
-	})
+	})*/
 
-	it('should return the note value', function() {
-		var x = notelist("C-5")
-		assert.equal(60, x[0])
+	it('should return the right chords', function() {
+		var x = notelist("C3M:C3M^3:%^37")
+		assert.ok(arrays_equal([60, 64, 67], x[0]))
+		assert.ok(arrays_equal([64, 67, 71], x[1]))
+		assert.ok(arrays_equal([64, 67, 71, 74], x[2]))
 	})
 })
 
@@ -72,14 +82,6 @@ describe('mkp', function() {
 	})
 })
 
-describe('flatten_event', function() {
-	it('should return the event in the same array', function() {
-		var x = [ mkp([0, 1, -2], "E-2:E-4", [100], [-1]), mkp([0, 1, -2], "E-2:E-4", [100], [-1]) ]
-		//x = flatten_event(x)
-		x = __.flatten(x,true)
-		assert.equal(x.length, 8)
-	})
-})
 
 describe('choose', function() {
 	it('should return 4 different values', function() {
@@ -87,3 +89,18 @@ describe('choose', function() {
 		assert.equal(x.length, 4)
 	})
 })
+
+describe('degree', function() {
+	it('should return correct deggree', function() {
+		var x = degree(1, modes["ionian"])
+		assert.ok(arrays_equal([ 0, 4, 7], x))
+		
+		x = degree(3, modes["ionian"])
+		assert.ok(arrays_equal([ 4, 7, 11 ], x))
+
+		x = degree(2, modes["ionian"]) 
+		assert.ok(arrays_equal([ 2, 5, 9], x))
+	})
+
+})
+

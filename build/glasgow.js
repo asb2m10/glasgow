@@ -1,37 +1,42 @@
 inlets = 1
 outlets = 2
 
-undo_buffer = new Array();
+var undo_buffer = []
 
-current_code = ""
+// the value of code window in max
+var current_code = ""
 
-function anything(sym, args) {
-  if ( _.isUndefined(sym) ) 
-    return
-  if ( sym.charAt(0) == '"') {
-    sym = sym.substring(1, sym.length-1 )
-  }
-	current_code = sym
+// called by max to update the textedit containing the code value
+function UpdateCode(code, text) {
+   if (_.isUndefined(text))
+      return
+   if (text.charAt(0) == '"') {
+      text = code.substring(1, text.length - 1)
+   }
+   current_code = text
 }
 
 
-function GetClip() {
-    fillGlobalVar()
-    api = new LiveAPI("live_set view detail_clip");
-    selected = api.call("select_all_notes");
-    rawNotes = api.call("get_selected_notes");
 
-    if (rawNotes[0] !== "notes") {
+function GetClip() {
+   fillGlobalVar()
+   api = new LiveAPI("live_set view detail_clip");
+   selected = api.call("select_all_notes");
+   rawNotes = api.call("get_selected_notes");
+
+   if (rawNotes[0] !== "notes") {
       glasgow_error("Unexpected note output!");
       return;
-    }
+   }
 
-    ret = "["
-    first = ""    
+   _gsLastGetClip = []
 
-    maxNumNotes = rawNotes[1];
+   ret = "["
+   first = ""
 
-    for (i = 2; i < (maxNumNotes * 6); i += 6) {
+   maxNumNotes = rawNotes[1];
+
+   for (i = 2; i < (maxNumNotes * 6); i += 6) {
       var note = rawNotes[i + 1]
       var tm = rawNotes[i + 2]
       var dur = rawNotes[i + 3]
@@ -39,182 +44,137 @@ function GetClip() {
       var muted = rawNotes[i + 5] === 1
 
       // if this is a valid note
-      if ( rawNotes[i] === "note" && _.isNumber(note) && _.isNumber(tm) && _.isNumber(dur) && _.isNumber(velo) ) {
-      	ret = ret + first + "[" + tm + ", " + note + ", " + velo + ", " + dur + "]"
-        first = ",\n"
+      if (rawNotes[i] === "note" && _.isNumber(note) && _.isNumber(tm) && _.isNumber(dur) && _.isNumber(velo)) {
+         ret = ret + first + "[" + tm + ", " + note + ", " + velo + ", " + dur + "]"
+         _gsLastGetClip.push( [ tm, note, velo, dur ] )
+         first = ",\n"
       } else {
-       	glasgow_error("unkown note returned by Live")
-        return
+         glasgow_error("unkown note returned by Live")
+         return
       }
-    }
-    ret = ret + "]"
-    push_undo()     
-	  outlet(1, "set", ret)
-    glasgow_info("GetClip successful")
-}
-
-function evalcode() {
-  fillGlobalVar()
-  try { 
-    out = eval(current_code)
-  } catch (err) {
-    glasgow_error(String(err))
-    out = null
-  }
-  return out 
+   }
+   ret = ret + "]"
+   push_undo()
+   outlet(1, "set", ret)
+   glasgow_info("GetClip successful")
 }
 
 
 function PutClip() {
-  var out = evalcode()
-  if ( out == null )
-    return;
+   var out = evalcode()
+   if (out == null)
+      return;
 
-  if ( ! _.isArray(out) ) {
-    glasgow_error("evaluation is not a array")
-    return;
-  }
-  if ( out.length == 0 ) {
-    glasgow_error("array is empty")
-    return;
-  }
+   if (!_.isArray(out)) {
+      glasgow_error("evaluation is not a array")
+      return;
+   }
+   if (out.length == 0) {
+      glasgow_error("array is empty")
+      return;
+   }
 
-  var success=1
+   var success = 1
+   var out = _.flatten(out, true)
+   var api = new LiveAPI("live_set view detail_clip");
+   api.call("select_all_notes");
+   api.call("replace_selected_notes");
+   api.call("notes", out.length)
+   for (i = 0; i < out.length; i++) {
+      if (out[i].length != 4) {
+         glasgow_info(out)
+         glasgow_error("skipping content of wrong size, index: " + i)
+         success = 0
+      }
 
-  var out = _.flatten(out, true)
-  var api = new LiveAPI("live_set view detail_clip");
-  api.call("select_all_notes");
-  api.call("replace_selected_notes");   
-  api.call("notes", out.length)
-  for(i=0;i<out.length;i++) {
-    if ( out[i].length != 4 ) {
-      glasgow_info(out)
-      glasgow_error("skipping content of wrong size, index: " + i)
-      success=0
-    }
+      // pitch time duration velocity muted
+      tm = Number(out[i][0]).toFixed(12)
+      note = out[i][1]
+      velo = out[i][2]
+      dur = Number(out[i][3]).toFixed(12)
 
-    // pitch time duration velocity muted
-    tm = Number(out[i][0]).toFixed(12)
-    note = out[i][1]
-    velo = out[i][2]
-    dur = Number(out[i][3]).toFixed(12)
+      if (_.isNaN(tm)) {
+         glasgow_error("wrong time defined : " + tm + ", index: " + i)
+         success = 0
+         continue;
+      }
 
-    if ( _.isNaN(tm) ) {
-      glasgow_error("wrong time defined : " + tm + ", index: " + i)
-      success=0
-      continue;
-    }
+      if (_.isNaN(note)) {
+         glasgow_error("wrong note defined : " + note + ", index: " + i)
+         success = 0
+         continue;
+      }
 
-    if ( _.isNaN(note) ) {
-      glasgow_error("wrong note defined : " + note + ", index: " + i)
-      success=0
-      continue;
-    }
+      if (_.isNaN(velo)) {
+         glasgow_error("wrong velocity defined : " + velo + ", index: " + i)
+         success = 0
+         continue;
+      }
 
-    if ( _.isNaN(velo) ) {
-      glasgow_error("wrong velocity defined : " + velo + ", index: " + i)
-      success=0
-      continue;
-    }
+      if (_.isNaN(dur)) {
+         glasgow_error("wrong duration defined : " + dur + ", index: " + i)
+         success = 0
+         continue;
+      }
 
-    if ( _.isNaN(dur) ) {
-      glasgow_error("wrong duration defined : " + dur + ", index: " + i)
-      success=0
-      continue;
-    }    
-
-    ln = [ "note", note, tm, dur, velo, 0]
-    api.call(ln)
-  }
-  api.call("done")
-  if ( success == 1 ) {
-    glasgow_info("PutClip successful")
-  }
-}
-
-function render_array(a) {
-  ret =  "["
-  f1 = ""
-  for(i=0;i<a.length;i++) {
-    if ( _.isArray(a[i]) ) {
-      ret += f1 + " ["
-      f2 = ""
-      for(j=0;j<a[i].length;j++) {
-        ret += f2 + a[i][j]
-        f2 = " ,"
-      } 
-      ret += "]"
-    } else {
-      ret += f1 + String(a[i])
-    }
-    f1 = " ,\n"
-  }
-  glasgow_info(ret)
-  return ret + "]"
+      ln = ["note", note, tm, dur, velo, 0]
+      api.call(ln)
+   }
+   api.call("done")
+   if (success == 1) {
+      glasgow_info("PutClip successful")
+   }
 }
 
 
 function Evaluate() {
-  out = evalcode()
-  if ( out == null )
-    return;  
+   out = evalcode()
+   if (out == null)
+      return;
 
-  outstr = String(out)
-  if ( _.isNumber(out) ) {
-    glasgow_info("result: " + outstr)
-    return;
-  }
+   outstr = String(out)
+   if (_.isNumber(out)) {
+      glasgow_info("result: " + outstr)
+      return;
+   }
 
-  if ( _.isString(out) ) {
-    glasgow_info("result: " + outstr)
-    return;
-  }
+   if (_.isString(out)) {
+      glasgow_info("result: " + outstr)
+      return;
+   }
 
-  if ( _.isArray(out) ) {
-   push_undo()
-   outlet(1, "set", render_array(out))
-   glasgow_info("done changed")
-   return;
- }
- glasgow_error("unkown type")
+   if (_.isArray(out)) {
+      push_undo()
+      outlet(1, "set", render_array(out))
+      glasgow_info("done changed")
+      return;
+   }
+   glasgow_error("unkown type")
 
 }
 
 
 function Undo() {
-  if ( undo_buffer.length > 0 ) {
-    undo_content = undo_buffer.pop()
-    outlet(1, "set", undo_content)
-  }
+   if (undo_buffer.length > 0) {
+      undo_content = undo_buffer.pop()
+      outlet(1, "set", undo_content)
+   }
 }
 
-
-function push_undo() {
-  if ( undo_buffer.length > 30 )
-    undo_buffer.shift()
-  if ( undo_buffer.length != 0 ) {
-    tst_last = undo_buffer.pop()
-    undo_buffer.push(tst_last)
-    if ( tst_last != current_code )
-      undo_buffer.push(current_code)
-  } else {
-      undo_buffer.push(current_code)
-  }
-}
 
 /**
  * Will work in the future 
  */
 function LoadLib() {
-  folder = new Folder("glasgow-lib");
+   folder = new Folder("glasgow-lib");
 
-  folder.typelist = [ "TEXT" ];
+   folder.typelist = ["TEXT"];
 
-  while(!folder.end) {
-    post(folder.filename + "\n")
-    folder.next()
-  }
-  folder.close()
+   while (!folder.end) {
+      post(folder.filename + "\n")
+      folder.next()
+   }
+   folder.close()
 
    /*post("loading file: " + filename)
    access = "read";
@@ -225,325 +185,595 @@ function LoadLib() {
    f.close()  */
 }
 
-function fillGlobalVar() {
-    api = new LiveAPI("live_set view detail_clip");
-    _gsClipStart = api.get("loop_start")[0]
-    _gsClipEnd = api.get("loop_end")[0]
+
+function evalcode() {
+   fillGlobalVar()
+   try {
+      out = eval(current_code)
+   } catch (err) {
+      glasgow_error(String(err))
+      out = null
+   }
+   return out
 }
+
+
+function render_array(a) {
+   ret = "["
+   f1 = ""
+   for (i = 0; i < a.length; i++) {
+      if (_.isArray(a[i])) {
+         ret += f1 + " ["
+         f2 = ""
+         for (j = 0; j < a[i].length; j++) {
+            ret += f2 + a[i][j]
+            f2 = " ,"
+         }
+         ret += "]"
+      } else {
+         ret += f1 + String(a[i])
+      }
+      f1 = " ,\n"
+   }
+   glasgow_info(ret)
+   return ret + "]"
+}
+
+
+function push_undo() {
+   if (undo_buffer.length > 30)
+      undo_buffer.shift()
+   if (undo_buffer.length != 0) {
+      tst_last = undo_buffer.pop()
+      undo_buffer.push(tst_last)
+      if (tst_last != current_code)
+         undo_buffer.push(current_code)
+   } else {
+      undo_buffer.push(current_code)
+   }
+}
+
+
+function fillGlobalVar() {
+   api = new LiveAPI("live_set view detail_clip");
+   _gsClipStart = api.get("loop_start")[0]
+   _gsClipEnd = api.get("loop_end")[0]
+}
+
 
 function glasgow_info(msg) {
-  error(msg + "\n")
-  outlet(0, "textcolor", "0", "0", "0", "1")
-  outlet(0, "set", msg)  
+   post(msg + "\n")
+   outlet(0, "textcolor", "0", "0", "0", "1")
+   outlet(0, "set", msg)
 }
+
 
 function glasgow_error(msg) {
-  post(msg + "\n")
-  outlet(0, "textcolor", "255", "0", "0", "1")
-  outlet(0, "set", msg)  
+   error(msg + "\n")
+   outlet(0, "textcolor", "255", "0", "0", "1")
+   outlet(0, "set", msg)
 }
 
-__ = _
 
-// API
-_gsVersion = 0.1
+// hack to support underscore in max/msp :(
+__ = _// API
+_gsVersion = 0.2
 
-// This is set by the Max plugin to inform the clip start loop point.
+// This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
 
-// This is set by the Max plugin to inform the clip start loop point.
+// This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipEnd = 4
 
-// This is emulating the quantize note value. The "0" duration value will be
-// based on this quantize ratio.
+// This is emulating the quantize note value. The "0" duration value 
+// in the note list will be based on this quantize ratio.
 var _gsClipQtz = 0.125
 
 // Use this if you want less precision on event timestamps. Once it gets 
-// Live, each event will be multipled by this value. 
+// into Live, each event will be multipled by this value. 
 var _gsTmRatio = 1
+
+// The last value what GetClip returned
+var _gsLastGetClip = []
+
+// The last selected note
+var _gsLastNote = 0
+
+// The last selected mode
+var _gsLastMode = "ionian"
+
+// The last selected octave
+var _gsLastOctave = 5
+
 
 function mkp(tm, note, velo, dur, start, end) {
 
-	if ( __.isUndefined(tm) ) {
-		tm = [ 0 ]
-	} else if ( __.isString(tm) ) {
-		tm = timelist(tm)
-	} else if ( __.isNumber(tm) ) {
-		tm = [ tm ]
-	}
-	if ( __.isArray(tm) )
-		tm = new IterLoopTm(tm)
+   if (__.isUndefined(tm)) {
+      tm = [0]
+   } else if (__.isString(tm)) {
+      tm = timelist(tm)
+   } else if (__.isNumber(tm)) {
+      tm = [tm]
+   }
+   if (__.isArray(tm))
+      tm = new IterLoopTm(tm)
 
-	if ( __.isUndefined(note) ) {
-		note = [ 65 ]
-	} else if ( __.isString(note) ) {
-		note = notelist(note)
-	} else if ( __.isNumber(tm) ) {
-		note = [ note ]
-	}
-	if ( __.isArray(note) )
-		note =  new IterLoop(note)
+   if (__.isUndefined(note)) {
+      note = [65]
+   } else if (__.isString(note)) {
+      note = notelist(note)
+   } else if (__.isNumber(tm)) {
+      note = [note]
+   }
+   if (__.isArray(note))
+      note = new IterLoop(note)
 
 
-	if ( __.isUndefined(dur) ) {
-		dur = [ 0 ]
-	} else if ( __.isString(dur) ) {
-		dur = timelist(dur)
-	} else if ( __.isNumber(dur) ) {
-		dur = [ dur ]
-	}
-	if ( __.isArray(dur) )
-		dur = new IterLoop(dur)
+   if (__.isUndefined(dur)) {
+      dur = [0]
+   } else if (__.isString(dur)) {
+      dur = timelist(dur)
+   } else if (__.isNumber(dur)) {
+      dur = [dur]
+   }
+   if (__.isArray(dur))
+      dur = new IterLoop(dur)
 
-	if ( __.isUndefined(velo) ) {
-		velo = [ 100 ]
-	} else if ( __.isString(velo) ) {
-		velo = timelist(velo)
-	} else if ( __.isNumber(velo) ) {
-		velo = [ velo ]
-	}
-	if ( __.isArray(velo) )
-		velo = new IterLoop(velo)
-	
-	if ( __.isUndefined(start) || start == -1 ) {
-		start = _gsClipStart
-	} 
+   if (__.isUndefined(velo)) {
+      velo = [100]
+   } else if (__.isString(velo)) {
+      velo = timelist(velo)
+   } else if (__.isNumber(velo)) {
+      velo = [velo]
+   }
+   if (__.isArray(velo))
+      velo = new IterLoop(velo)
 
-	if ( __.isUndefined(end) || end == -1 ) {
-		end = _gsClipEnd
-	}
+   if (__.isUndefined(start) || start == -1) {
+      start = _gsClipStart
+   }
 
-	ret = new Array()
+   if (__.isUndefined(end) || end == -1) {
+      end = _gsClipEnd
+   }
 
-	var _i
+   var ret = []
+   for (var i = 0; i < 1024; i++) {
+      t = tm.next()
+      if (t == null) {
+         break;
+      }
+      t += start
 
-	for(_i=0;_i<100;_i++) {
-		t = tm.next() 
-		if ( t == null ) {
-			break;
-		}
-		t += start
+      d = dur.next()
+      if (d == null) {
+         break;
+      }
 
-		d = dur.next() 
-		if ( d == null ) {
-			break;
-		}
+      // note duration by quantize
+      if (d == 0) {
+         d = _gsClipQtz
+      }
 
-		// note duration by quantize
-		if ( d == 0 ) {
-			d = _gsClipQtz
-		} 
+      // note until next event
+      if (d == -1) {
+         d = (tm.peek() + start) - t
+      }
 
-		// note until next event
-		if ( d == -1 ) {
-			d = (tm.peek() + start) - t
-		}
+      if (t + d > end)
+         break
 
-		if ( t+d > end )
-			break
+      v = velo.next()
+      if (v == null) {
+         break;
+      }
 
-		v = velo.next()
-		if ( v == null ) {
-			break;
-		}
+      n = note.next()
+      if (n == null) {
+         break;
+      }
 
-		n = note.next()
-		if ( n == null ) {
-			break;
-		}
-		// test if it is a chord
-		if ( __.isArray(n) ) {
-			for(var i=0;i<n.length;i++) {
-				ret.push( [ t, n[i], v, d ] )
-			}
-		} else {
-			ret.push( [ t, n, v, d ] )
-		}
-	}
+      // if it is a chord
+      if (__.isArray(n)) {
+         for (var i = 0; i < n.length; i++) {
+            ret.push([t, n[i], v, d])
+         }
+      } else {
+         ret.push([t, n, v, d])
+      }
+   }
 
-	if ( _i >= 16000 ) {
-		throw "got stuck in a loop in mkp. See your iterators: " + _i
-	}
+   if (i >= 1024) {
+      throw "got stuck in a loop in mkp. See your iterators: " + i
+   }
 
-	return ret
+   return ret
 }
 
 
 function timelist(tm) {
-	var tms = tm.split(":")
-	var ret = new Array()
-	for( i in tms ) {
-		if ( tms[i].indexOf("/") != -1 ) { 
-			base = tms[i].split(".")
-			add = parseFloat(base[0])
-			if ( tms[i].length > 1 ) {	
-				add += (eval(base[1]))
-			} 
-		} else {
-			add = parseFloat(tms[i])
+   var tms = tm.split(":")
+   var ret = []
+   for (i in tms) {
+      var it = tms[i].trim()
+      if (it.indexOf("/") != -1) {
+         base = it.split(".")
+         add = parseFloat(base[0])
+         if (it.length > 1) {
+            add += (eval(base[1]))
+         }
+      } else {
+         add = parseFloat(it)
 
-		}
-		ret.push( add )
-	}
-	return ret
+      }
+      ret.push(add)
+   }
+   return ret
 }
 
 
+function isnum(chr) {
+   var x = chr.charCodeAt(0)
+   return x >= 48 && x <= 57
+}
+
+
+function ischar(chr) {
+   var x = chr.charCodeAt(0)
+   return ( x >= 65 && x <= 90 ) || ( x >= 97 && x <= 122 )
+}
+
+
+// note format: notename mode degre voices (<< >> inversion)
+//
+// D-3M0^7<< : %3> : %1^7^13
 function rendernote(str, chord) {
-	var z = str.charCodeAt(0)
-	if ( z == 68 ) { 			// D
-		z = 2
-	} else if ( z == 69 ) {		// E
-		z = 4
-	} else if ( z == 70 ) {		// F
-		z = 5
-	} else if ( z == 71 ) {		// G
-		z = 7
-	} else if ( z == 65 ) {		// A
-		z = -3
-	} else if ( z == 66 ) {		// B
-		z = -1
-	} else {					// DEFAULT charCodeAt
-		z = 0
-	}
-	if ( str.charAt(1) == '#' )
-		z++
-	z += parseInt(str.substring(2)) * 12
-	chord.push(z)
+   str = str.trim().split('')
+   str.push(' ')
+   var state = 0;
+   var buff = []
+   var inv = 0
+   var v = []
+   var d = 1
+   var m = null
+   var minus = 1
+
+   for(var i=0;i<str.length;i++) {
+      var cur=str[i]
+      switch(state) {
+         case 0 :
+            switch(cur) {
+               case '%' :
+                  z = _gsLastNote
+                  m = _gsLastMode
+                  state = 3
+               break;
+               case 'D' : z = 2; state=1; break
+               case 'E' : z = 4; state=1; break
+               case 'F' : z = 5; state=1; break
+               case 'G' : z = 7; state=1; break
+               case 'A' : z = -3; state=1; break
+               case 'B' : z = -1; state=1; break
+               case 'C' : z = 0; state=1; break
+               default :
+                  throw "unknown note"
+            }
+         break;
+
+         // sharp define
+         case 1 :
+            switch(cur) {
+               case '-' :
+                  minus = -1
+               break;
+               case '#' :
+                  z++
+               break;
+               default:
+                  z += parseInt(cur) * 12
+                  z *= minus
+                  z += 24    // uses Ableton Note octave numbering : from C-2 to G8
+                  _gsLastNote = z
+                  buff = []
+                  state = 2
+            }
+            break;
+
+         // mode name
+         case 2:
+            if (cur==' ') {
+               if ( buff.length != 0 ) {
+                  m = buff.join('')
+                  _gsLastMode = m
+                  buff = []
+               }
+               break
+            }         
+            if (ischar(cur)) {
+               buff.push(cur)
+               break
+            } 
+
+            if (cur == '^') {
+               // parse chord name
+               buff = []
+               state = 3
+               break;
+            } 
+
+            if (isnum(cur)) {
+               // jump to voicing
+               buff = [ cur ] 
+               state = 5
+               break;
+            }
+
+            buff.push(cur)
+            m = buff.join('')
+            _gsLastMode = m
+            
+         break
+
+         // degree name
+         case 3: 
+            if (isnum(cur)) {
+               d = cur
+               buff = []
+               state = 5
+               break;
+            } 
+
+            if (ischar(cur)) {
+               buff = [ cur ]
+               state = 4
+               break;
+            }
+         break
+
+         case 4: 
+            if (ischar(cur)) {
+               buff.push(cur)
+            } else {
+               d = buff.join('')
+               buff = []
+               i--
+               state = 5
+            }
+         break;
+
+         // extra voicing  
+         case 5 :
+            if (isnum(cur)) {
+               buff.push(cur)
+               break
+            }
+            switch(cur) {
+            case  '-' :
+               v.push(parseInt(buff.join('')))
+               buff = []
+            break;
+            case '<' :
+               inv--
+            break
+            case '>' :
+               inv++
+            break
+            }
+         break
+      }
+   }
+
+   if ( buff.length != 0 ) {
+      v.push(parseInt(buff.join('')))
+   } 
+
+
+   // is it just a note ?
+   if ( m == null ) {
+      return chord.push(z)
+   }
+
+
+   if ( v.length == 0 )
+      v = null
+
+   var notes = degree(d, m, v)
+   inverter(notes, inv)
+   addl(z, notes)
+
+   chord.push(notes)
 }
 
 
 function notelist(note) {
-	var note = note.toUpperCase()
-	var notes = note.split(":")
-	var ret = new Array();
-	for(var i=0;i<notes.length;i++) {
-		var chord = new Array()
-		var c = notes[i].split(",")
-		for(var j=0;j<c.length;j++)
-			rendernote(c[j], chord)
-		if ( chord.length == 0 )
-			continue
-		if ( chord.length == 1 )
-			ret.push( chord[0] )
-		else 
-			ret.push( chord )
-	}
-	return ret
+   var note = note.toUpperCase()
+   var notes = note.split(":")
+   var ret = []
+   for (var i = 0; i < notes.length; i++) {
+      var chord = []
+      var c = notes[i].split(",")
+      for (var j = 0; j < c.length; j++)
+         rendernote(c[j], chord)
+      if (chord.length == 0)
+         continue
+      if (chord.length == 1)
+         ret.push(chord[0])
+      else
+         ret.push(chord)
+   }
+   return ret
 }
 
-function flatten_event(lst) {
-	var ret = new Array()
-	for(var i=0;i<lst.length;i++) {
-		if ( __.isArray(lst[i]) ) {
-
-			if ( __.isArray(lst[i][0]) ) {
-				for(var j=0;j<lst[i].length;j++) {
-					ret.push(lst[i][j])
-				}
-			} else {
-				ret.push(lst[i])
-			}
-		} 
-	}
-	return ret;
+function addl(v, lst) {
+   for(var i=0;i<lst.length;i++) {
+      lst[i] = lst[i] + v
+   }
 }
 
 function choose(times, lst) {
-	var ret = new Array()
-	for(var i=0;i<lst.length;i++) {
-		ret.push(lst[__.random(0,lst.length-1)])
-	}
-	return ret;
+   var ret = []
+   for (var i = 0; i < lst.length; i++) {
+      ret.push(lst[__.random(0, lst.length - 1)])
+   }
+   return ret;
 }
 
 function IterLoop(lst) {
-	this.i = -1;
-	this.lst = lst
+   this.i = -1;
+   this.lst = lst
 }
-IterLoop.prototype.next = function() {
-	if ( ++this.i >= this.lst.length ) {
-		this.i = 0
-	}
-	return this.lst[this.i]
+IterLoop.prototype.next = function () {
+   if (++this.i >= this.lst.length) {
+      this.i = 0
+   }
+   return this.lst[this.i]
 }
 
 function IterLoopTm(lst, end) {
-	if ( __.isUndefined(end) || __.isNaN(end) ) {
-		end = -1
-	}
+   if (__.isUndefined(end) || __.isNaN(end)) {
+      end = -1
+   }
 
-	// tries to calculate the end of the loop point
-	if ( end == -1 ) {
-		if ( lst[lst.length-1] < 0 ) {
-			end = lst[lst.length-1] * -1
-			// remove the list length 
-			lst.pop()
-		} else { 
-			work = lst.slice(0)
-			work.sort()
-			work = __.uniq(lst)
-			if ( work.length > 1 ) {
-				l1 = work.pop()
-				l2 = work.pop()
-				end = l1 + (l1-l2)
-			} else {
-				l1 = work.pop()
-				if ( l1 == 0 ) {
-				// defaulting to 1/4 note
-					end = _gsClipQtz
-				} else {
-					end = l1
-				}
-			}
-		}
-	}
-	this.end = end
-	this.i = -1;
-	this.lst = lst;
-	this.looped = 0
+   // tries to calculate the end of the loop point
+   if (end == -1) {
+      if (lst[lst.length - 1] < 0) {
+         end = lst[lst.length - 1] * -1
+         // remove the list length 
+         lst.pop()
+      } else {
+         work = lst.slice(0)
+         work.sort()
+         work = __.uniq(lst)
+         if (work.length > 1) {
+            l1 = work.pop()
+            l2 = work.pop()
+            end = l1 + (l1 - l2)
+         } else {
+            l1 = work.pop()
+            if (l1 == 0) {
+               // defaulting to 1/4 note
+               end = _gsClipQtz
+            } else {
+               end = l1
+            }
+         }
+      }
+   }
+   this.end = end
+   this.i = -1;
+   this.lst = lst;
+   this.looped = 0
 
 }
-IterLoopTm.prototype.next = function() {
-	if ( ++this.i >= this.lst.length ) {
-		this.i = 0
-		this.looped++
-	}
-	return this.lst[this.i] + (this.looped * this.end)
+IterLoopTm.prototype.next = function () {
+   if (++this.i >= this.lst.length) {
+      this.i = 0
+      this.looped++
+   }
+   return this.lst[this.i] + (this.looped * this.end)
 }
 
-IterLoopTm.prototype.peek = function() {
-	i2 = this.i + 1
-	if ( i2 < this.lst.length ) {		
-		return this.lst[i2] + ( this.looped * this.end )
-	} else {
-		return this.lst[0] + ( (this.looped+1) * this.end)
-	}
+IterLoopTm.prototype.peek = function () {
+   i2 = this.i + 1
+   if (i2 < this.lst.length) {
+      return this.lst[i2] + (this.looped * this.end)
+   } else {
+      return this.lst[0] + ((this.looped + 1) * this.end)
+   }
 }
 
 
 function IterLast(lst) {
-	this.i = -1;
-	this.lst = lst;	
+   this.i = -1;
+   this.lst = lst;
 }
-IterLast.prototype.next = function() {
-	if ( ++this.i >= this.lst.length ) {
-		this.i--
-	}
-	return this.lst[this.i]
+IterLast.prototype.next = function () {
+   if (++this.i >= this.lst.length) {
+      this.i--
+   }
+   return this.lst[this.i]
 }
 
 function IterDone(lst) {
-	this.i = -1;
-	this.lst = lst;	
+   this.i = -1;
+   this.lst = lst;
 }
-/*IterDone.prototype.next = function() {
-	if ( ++this.i >= this.lst.length) {
-		return null
+IterDone.prototype.next = function() {
+    if ( ++this.i >= this.lst.length) {
+        return null
+    }
+    return this.lst[this.i]
+}
+// modal stuff
+
+modes = {
+
+	"ionian"     : [ 2, 2, 1, 2, 2, 2, 1 ],
+	"dorian"     : [ 2, 1, 2, 2, 2, 1, 2 ],
+	"phrygian"   : [ 1, 2, 2, 2, 1, 2, 2 ],
+	"lydian"     : [ 2, 2, 2, 1, 2, 2, 1 ],
+	"mixolydian" : [ 2, 2, 1, 2, 2, 1, 2 ],
+	"aeolian"    : [ 2, 1, 2, 2, 1, 2, 2 ],
+	"locrian"    : [ 1, 2, 2, 1, 2, 2, 2 ],
+
+
+	// synonyms
+
+	"M"          : [ 2, 2, 1, 2, 2, 2, 1 ]
+}
+
+// degree(degree, mode, voices, resticted_classe)
+
+function degree(d, m, v, r) {
+	if ( __.isString(m) ) {
+		m = modes[m]
 	}
-	return this.lst[this.i]
-}*/
-//     Underscore.js 1.4.2
+
+	if ( __.isUndefined(d) ) {
+		d = 1
+	}
+	if ( __.isString(d) ) {
+		d = Number(d)
+	}
+	
+	if ( __.isUndefined(r) ) {
+		r = 0
+	}
+
+	if ( __.isUndefined(v) || v == null ) {
+		v = [ 1, 3, 5 ]
+	} else if ( v[0] > 4 ) {
+    	v.unshift(1,3,5)
+    }
+
+	//console.log("modal:", d, m, v, r, "******")
+	d--
+	addl(-1, v)
+
+	var mode = []
+	var count=0;
+	for(var i=0;i<m.length;i++) {
+		mode.push(count)
+		count += m[i]
+	}
+	var ret = []
+	for(var i=0;i<v.length;i++) {
+		var x = mode[(v[i]+d)%m.length] + (Math.floor((v[i]+d)/m.length)*12)
+		ret.push(x)
+	}
+
+	// restrict class
+	if(r != 0) {
+		for(var i=0;i<ret.length;i++) {
+			ret[i] = ret[i] % 12
+		}
+	}
+	return ret;
+}
+
+function inverter(def, lvl) {
+	return def
+}//     Underscore.js 1.4.2
 //     http://underscorejs.org
 //     (c) 2009-2012 Jeremy Ashkenas, DocumentCloud Inc.
 //     Underscore may be freely distributed under the MIT license.
