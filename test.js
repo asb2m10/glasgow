@@ -30,12 +30,12 @@ describe('timelist', function() {
 })
 
 describe('notelist', function() {
-	/*it('should return the array of midi note', function() {
+	it('should return the array of midi note', function() {
 		var x = notelist("C-2:C3:C#3")
 		assert.equal(0, x[0])
 		assert.equal(60, x[1])
 		assert.equal(61, x[2])
-	})*/
+	})
 
 	it('should return the right chords', function() {
 		var x = notelist("C3M:C3M^3:%^37")

@@ -30,13 +30,9 @@ function GetClip() {
    }
 
    _gsLastGetClip = []
-
-   ret = "["
-   first = ""
-
    maxNumNotes = rawNotes[1];
 
-   for (i = 2; i < (maxNumNotes * 6); i += 6) {
+   for (var i = 2; i < (maxNumNotes * 6); i += 6) {
       var note = rawNotes[i + 1]
       var tm = rawNotes[i + 2]
       var dur = rawNotes[i + 3]
@@ -45,17 +41,24 @@ function GetClip() {
 
       // if this is a valid note
       if (rawNotes[i] === "note" && _.isNumber(note) && _.isNumber(tm) && _.isNumber(dur) && _.isNumber(velo)) {
-         ret = ret + first + "[" + tm + ", " + note + ", " + velo + ", " + dur + "]"
          _gsLastGetClip.push( [ tm, note, velo, dur ] )
-         first = ",\n"
       } else {
          glasgow_error("unkown note returned by Live")
          return
       }
    }
+
+   /* Live doesnt return the events in a sorted order. We do: <3 underscore */
+   _gsLastGetClip = __.sortBy(_gsLastGetClip, function(n) { n[0] })
+   first = ""
+   ret = "["
+   for(var i=0;i<_gsLastGetClip.length;i++) {
+         ret = ret + first + "[" + _gsLastGetClip[i][0] + ", " + _gsLastGetClip[i][1] + ", " + _gsLastGetClip[i][2] + ", " + _gsLastGetClip[i][3] + "]"
+         first = ",\n"
+   }
    ret = ret + "]"
    push_undo()
-   outlet(1, "set", ret)
+   outlet(1, 'set', ret)
    glasgow_info("GetClip successful")
 }
 

@@ -9,5 +9,8 @@ clean:
 	rm build/glasgow.js
 	rm build/mocha-test.js
 
+readme:
+	marked README.md -o build/readme.html
+
 selfzip:
 	zip ../glasgow-`date +'%m-%d-%Y'`.zip -pp glasgow -r *

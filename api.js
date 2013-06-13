@@ -24,12 +24,8 @@ var _gsLastNote = 0
 // The last selected mode
 var _gsLastMode = "ionian"
 
-// The last selected octave
-var _gsLastOctave = 5
-
 
 function mkp(tm, note, velo, dur, start, end) {
-
    if (__.isUndefined(tm)) {
       tm = [0]
    } else if (__.isString(tm)) {
@@ -179,12 +175,13 @@ function rendernote(str, chord) {
    var d = 1
    var m = null
    var minus = 1
+   var r = 0
 
    for(var i=0;i<str.length;i++) {
       var cur=str[i]
       switch(state) {
          case 0 :
-            switch(cur) {
+            switch(cur.toUpperCase()   ) {
                case '%' :
                   z = _gsLastNote
                   m = _gsLastMode
@@ -300,6 +297,9 @@ function rendernote(str, chord) {
             case '>' :
                inv++
             break
+            case 'r' :
+            case 'R' :
+               r = 1
             }
          break
       }
@@ -309,17 +309,15 @@ function rendernote(str, chord) {
       v.push(parseInt(buff.join('')))
    } 
 
-
    // is it just a note ?
    if ( m == null ) {
       return chord.push(z)
    }
 
-
    if ( v.length == 0 )
       v = null
 
-   var notes = degree(d, m, v)
+   var notes = degree(d, m, v, r)
    inverter(notes, inv)
    addl(z, notes)
 
@@ -328,7 +326,6 @@ function rendernote(str, chord) {
 
 
 function notelist(note) {
-   var note = note.toUpperCase()
    var notes = note.split(":")
    var ret = []
    for (var i = 0; i < notes.length; i++) {
@@ -346,19 +343,34 @@ function notelist(note) {
    return ret
 }
 
-function addl(v, lst) {
-   for(var i=0;i<lst.length;i++) {
-      lst[i] = lst[i] + v
-   }
+
+function extnote(clip) {
+
 }
 
+function exttm(clip) {
+   
+}
+
+
+// adds the value of 'v' to all the elements in the 'lst' array
+function addl(v, lst) {
+   for(var i=0;i<lst.length;i++)
+      lst[i] += v
+   return lst
+}
+
+
+// randomly chooses an element in 'lst', puts the result in returned array 
+// 'times' times.
 function choose(times, lst) {
    var ret = []
-   for (var i = 0; i < lst.length; i++) {
+   for (var i = 0; i < times; i++) {
       ret.push(lst[__.random(0, lst.length - 1)])
    }
    return ret;
 }
+
 
 function IterLoop(lst) {
    this.i = -1;

@@ -24,12 +24,8 @@ var _gsLastNote = 0
 // The last selected mode
 var _gsLastMode = "ionian"
 
-// The last selected octave
-var _gsLastOctave = 5
-
 
 function mkp(tm, note, velo, dur, start, end) {
-
    if (__.isUndefined(tm)) {
       tm = [0]
    } else if (__.isString(tm)) {
@@ -179,12 +175,13 @@ function rendernote(str, chord) {
    var d = 1
    var m = null
    var minus = 1
+   var r = 0
 
    for(var i=0;i<str.length;i++) {
       var cur=str[i]
       switch(state) {
          case 0 :
-            switch(cur) {
+            switch(cur.toUpperCase()   ) {
                case '%' :
                   z = _gsLastNote
                   m = _gsLastMode
@@ -300,6 +297,9 @@ function rendernote(str, chord) {
             case '>' :
                inv++
             break
+            case 'r' :
+            case 'R' :
+               r = 1
             }
          break
       }
@@ -309,17 +309,15 @@ function rendernote(str, chord) {
       v.push(parseInt(buff.join('')))
    } 
 
-
    // is it just a note ?
    if ( m == null ) {
       return chord.push(z)
    }
 
-
    if ( v.length == 0 )
       v = null
 
-   var notes = degree(d, m, v)
+   var notes = degree(d, m, v, r)
    inverter(notes, inv)
    addl(z, notes)
 
@@ -328,7 +326,6 @@ function rendernote(str, chord) {
 
 
 function notelist(note) {
-   var note = note.toUpperCase()
    var notes = note.split(":")
    var ret = []
    for (var i = 0; i < notes.length; i++) {
@@ -346,19 +343,26 @@ function notelist(note) {
    return ret
 }
 
+
+
+
+// adds the value of 'v' to all the elements in the 'lst' array
 function addl(v, lst) {
-   for(var i=0;i<lst.length;i++) {
-      lst[i] = lst[i] + v
-   }
+   for(var i=0;i<lst.length;i++)
+      lst[i] += v
 }
 
+
+// randomly chooses a element in 'lst', puts the result in returned array 
+// 'times' times.
 function choose(times, lst) {
    var ret = []
-   for (var i = 0; i < lst.length; i++) {
+   for (var i = 0; i < times; i++) {
       ret.push(lst[__.random(0, lst.length - 1)])
    }
    return ret;
 }
+
 
 function IterLoop(lst) {
    this.i = -1;
@@ -447,74 +451,74 @@ IterDone.prototype.next = function() {
     return this.lst[this.i]
 }
 // modal stuff
-
 modes = {
 
-	"ionian"     : [ 2, 2, 1, 2, 2, 2, 1 ],
-	"dorian"     : [ 2, 1, 2, 2, 2, 1, 2 ],
-	"phrygian"   : [ 1, 2, 2, 2, 1, 2, 2 ],
-	"lydian"     : [ 2, 2, 2, 1, 2, 2, 1 ],
-	"mixolydian" : [ 2, 2, 1, 2, 2, 1, 2 ],
-	"aeolian"    : [ 2, 1, 2, 2, 1, 2, 2 ],
-	"locrian"    : [ 1, 2, 2, 1, 2, 2, 2 ],
+   "ionian": [2, 2, 1, 2, 2, 2, 1],
+   "dorian": [2, 1, 2, 2, 2, 1, 2],
+   "phrygian": [1, 2, 2, 2, 1, 2, 2],
+   "lydian": [2, 2, 2, 1, 2, 2, 1],
+   "mixolydian": [2, 2, 1, 2, 2, 1, 2],
+   "aeolian": [2, 1, 2, 2, 1, 2, 2],
+   "locrian": [1, 2, 2, 1, 2, 2, 2],
 
 
-	// synonyms
+   // synonyms
 
-	"M"          : [ 2, 2, 1, 2, 2, 2, 1 ]
+   "M": [2, 2, 1, 2, 2, 2, 1],
+   "m": [2, 1, 2, 2, 2, 2, 1]
 }
 
 // degree(degree, mode, voices, resticted_classe)
 
 function degree(d, m, v, r) {
-	if ( __.isString(m) ) {
-		m = modes[m]
-	}
+   if (__.isString(m)) {
+      m = modes[m]
+   }
 
-	if ( __.isUndefined(d) ) {
-		d = 1
-	}
-	if ( __.isString(d) ) {
-		d = Number(d)
-	}
-	
-	if ( __.isUndefined(r) ) {
-		r = 0
-	}
+   if (__.isUndefined(d)) {
+      d = 1
+   }
+   if (__.isString(d)) {
+      d = Number(d)
+   }
 
-	if ( __.isUndefined(v) || v == null ) {
-		v = [ 1, 3, 5 ]
-	} else if ( v[0] > 4 ) {
-    	v.unshift(1,3,5)
-    }
+   if (__.isUndefined(r)) {
+      r = 0
+   }
 
-	//console.log("modal:", d, m, v, r, "******")
-	d--
-	addl(-1, v)
+   if (__.isUndefined(v) || v == null) {
+      v = [1, 3, 5]
+   } else if (v[0] > 4) {
+      v.unshift(1, 3, 5)
+   }
 
-	var mode = []
-	var count=0;
-	for(var i=0;i<m.length;i++) {
-		mode.push(count)
-		count += m[i]
-	}
-	var ret = []
-	for(var i=0;i<v.length;i++) {
-		var x = mode[(v[i]+d)%m.length] + (Math.floor((v[i]+d)/m.length)*12)
-		ret.push(x)
-	}
+   //console.log("modal:", d, m, v, r, "******")
+   d--
+   addl(-1, v)
 
-	// restrict class
-	if(r != 0) {
-		for(var i=0;i<ret.length;i++) {
-			ret[i] = ret[i] % 12
-		}
-	}
-	return ret;
+   var mode = []
+   var count = 0;
+   for (var i = 0; i < m.length; i++) {
+      mode.push(count)
+      count += m[i]
+   }
+   var ret = []
+   for (var i = 0; i < v.length; i++) {
+      var x = mode[(v[i] + d) % m.length] + (Math.floor((v[i] + d) / m.length) * 12)
+      ret.push(x)
+   }
+
+   // restrict class
+   if (r != 0) {
+      for (var i = 0; i < ret.length; i++) {
+         ret[i] = ret[i] % 12
+      }
+   }
+   return ret;
 }
 
 function inverter(def, lvl) {
-	return def
+   return def
 }//     Underscore.js 1.4.2
 //     http://underscorejs.org
 //     (c) 2009-2012 Jeremy Ashkenas, DocumentCloud Inc.
@@ -1750,12 +1754,12 @@ describe('timelist', function() {
 })
 
 describe('notelist', function() {
-	/*it('should return the array of midi note', function() {
+	it('should return the array of midi note', function() {
 		var x = notelist("C-2:C3:C#3")
 		assert.equal(0, x[0])
 		assert.equal(60, x[1])
 		assert.equal(61, x[2])
-	})*/
+	})
 
 	it('should return the right chords', function() {
 		var x = notelist("C3M:C3M^3:%^37")
