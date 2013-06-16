@@ -1,5 +1,9 @@
-// API
-_gsVersion = 0.2
+// ----------------------------------------------------------------------------
+// the Glasgow API.
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+// API version
+var _gsVersion = 0.2
 
 // This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
@@ -130,6 +134,7 @@ function mkp(tm, note, velo, dur, start, end) {
 
 
 function timelist(tm) {
+   glasgow_info("time: " + tm)
    var tms = tm.split(":")
    var ret = []
    for (i in tms) {
@@ -162,9 +167,7 @@ function ischar(chr) {
 }
 
 
-// note format: notename mode degre voices (<< >> inversion)
-//
-// D-3M0^7<< : %3> : %1^7^13
+// render note (or chord)
 function rendernote(str, chord) {
    str = str.trim().split('')
    str.push(' ')
@@ -344,14 +347,70 @@ function notelist(note) {
 }
 
 
+// extract note
 function extnote(clip) {
+   if (clip.length==0)
+      return []
 
+   var ret = [ ]
+   var tmp = [ clip[0][1] ]
+   var lasttm = clip[0][0]
+
+   for(i=1;i<clip.length;i++) {
+      if (lasttm == clip[i][0] ) {
+         tmp.push(clip[i][1])
+      } else {
+         if (tmp.length == 1) {
+            ret.push(tmp[0])
+         } else {
+            ret.push(tmp)
+         }
+         tmp = [ clip[i][1] ]
+         lasttm = clip[i][0]
+      }
+   }
+
+   if (tmp.length == 1) {
+      ret.push(tmp[0])
+   } else {
+      ret.push(tmp)
+   }   
+   return ret
 }
 
+// extract time
 function exttm(clip) {
-   
+   if ( clip.length == 0 )
+      return []
+
+   var lasttm = clip[0][0]
+   var ret = [ lasttm ]
+   for(i=1;i<clip.length;i++) {
+      if (lasttm != clip[i][0]) {
+         lasttm = clip[i][0]
+         ret.push(lasttm)
+      }
+   }
+   return ret
 }
 
+// extract rhythm 
+function extrhythm(clip) {
+   if(clip.length==0)
+      return []
+
+   ret = {}
+   for(i=0;i<clip.length;i++) {
+      tm = clip[i][0]
+      nt = clip[i][1]
+      if (__.isUndefined(ret[tm])) { 
+         ret[tm] = [ nt ]
+      } else {
+         ret[tm].push(nt)
+      }
+   }
+   return ret
+}
 
 // adds the value of 'v' to all the elements in the 'lst' array
 function addl(v, lst) {
@@ -363,15 +422,36 @@ function addl(v, lst) {
 
 // randomly chooses an element in 'lst', puts the result in returned array 
 // 'times' times.
-function choose(times, lst) {
+function choose(times, lst, prob) {
    var ret = []
-   for (var i = 0; i < times; i++) {
-      ret.push(lst[__.random(0, lst.length - 1)])
+
+   if(__.isUndefined(prob)) {
+      prob == null
+      for (var i = 0; i < times; i++) {
+         ret.push(lst[__.random(0, lst.length - 1)])
+      }
+   } else {
+      if ( prob.length < lst.length ) {
+         for(var i=lst.length-prop.length;i<lst.length;i++) {
+            prob.push(0.5)
+         }
+      }
+      tmp = prob.slice(0)
+      __.map(tmp, function(x) { return Math.random() + x })
+      ret.push(lst[__.indexOf(tmp, __.max(tmp))])
    }
    return ret;
 }
 
 
+
+/**
+ * Iterators are use to loop over a list.
+ * 
+ * Iterator(lst) - constructor, takes a list
+ * Iterator.next - returns the next element, null if N/A
+ * Iterator.peek - returns the next element but doesn't iterate the object, null if N/A
+ */
 function IterLoop(lst) {
    this.i = -1;
    this.lst = lst
@@ -458,3 +538,4 @@ IterDone.prototype.next = function() {
     }
     return this.lst[this.i]
 }
+

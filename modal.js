@@ -1,4 +1,7 @@
-// modal stuff
+// ----------------------------------------------------------------------------
+// the modal (music theory) stuff
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 modes = {
 
    "ionian": [2, 2, 1, 2, 2, 2, 1],
@@ -16,8 +19,7 @@ modes = {
    "m": [2, 1, 2, 2, 2, 2, 1]
 }
 
-// degree(degree, mode, voices, resticted_classe)
-
+// degree(degree, mode, voices, resticted_class)
 function degree(d, m, v, r) {
    if (__.isString(m)) {
       m = modes[m]
@@ -66,5 +68,24 @@ function degree(d, m, v, r) {
 }
 
 function inverter(def, lvl) {
+   var oz = 0
+   for(var i=0;i<def.length;i++) {
+      if ( oz < Math.floor(def[i] / 12) )
+         oz = Math.floor(def[i] / 12)
+   }
+   oz = oz * 12 + 12
+   if(lvl < 0) {
+      lvl *= -1
+      if (lvl>def.length)
+         lvl = def.length
+      for(i=def.length-1;i>def.length-lvl;i--) 
+         def[i] = def[i] - oz
+   } else {
+      if (lvl>def.length)
+         lvl = def.length
+      for(i=0;i<lvl;i++) 
+         def[i] = def[i] + oz
+   }
    return def
 }
+

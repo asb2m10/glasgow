@@ -1,3 +1,8 @@
+// ----------------------------------------------------------------------------
+// the Max/MSP related interface
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+
 inlets = 1
 outlets = 2
 
@@ -15,7 +20,6 @@ function UpdateCode(code, text) {
    }
    current_code = text
 }
-
 
 
 function GetClip() {
@@ -88,6 +92,7 @@ function PutClip() {
          glasgow_info(out)
          glasgow_error("skipping content of wrong size, index: " + i)
          success = 0
+         break
       }
 
       // pitch time duration velocity muted
@@ -99,25 +104,25 @@ function PutClip() {
       if (_.isNaN(tm)) {
          glasgow_error("wrong time defined : " + tm + ", index: " + i)
          success = 0
-         continue;
+         break
       }
 
       if (_.isNaN(note)) {
          glasgow_error("wrong note defined : " + note + ", index: " + i)
          success = 0
-         continue;
+         break
       }
 
       if (_.isNaN(velo)) {
          glasgow_error("wrong velocity defined : " + velo + ", index: " + i)
          success = 0
-         continue;
+         break
       }
 
       if (_.isNaN(dur)) {
          glasgow_error("wrong duration defined : " + dur + ", index: " + i)
          success = 0
-         continue;
+         break
       }
 
       ln = ["note", note, tm, dur, velo, 0]
@@ -192,7 +197,14 @@ function LoadLib() {
 function evalcode() {
    fillGlobalVar()
    try {
-      out = eval(current_code)
+      /* undocumented feature, if it starts with ( it is considered a
+         lisp snippet */
+      if ( current_code.charAt(0) == '(') {
+         glasgow_info("using lisp engine to parse snippet")
+         out = interpret(current_code)
+      } else {
+         out = eval(current_code)
+      }
    } catch (err) {
       glasgow_error(String(err))
       out = null
@@ -260,3 +272,4 @@ function glasgow_error(msg) {
 
 // hack to support underscore in max/msp :(
 __ = _
+

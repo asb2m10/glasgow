@@ -1,4 +1,7 @@
-
+// ----------------------------------------------------------------------------
+// mocha tests
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 var assert = require("assert")
 
 function arrays_equal(a,b) { 
@@ -87,6 +90,9 @@ describe('choose', function() {
 	it('should return 4 different values', function() {
 		var x = choose(4, [60, 63, 65, 66])
 		assert.equal(x.length, 4)
+		var x = choose(4, [60, 63, 65, 66], [0.2, 0.5, 0.5, 0.9])
+		assert.equal(x.length, 4)
+
 	})
 })
 
@@ -99,7 +105,23 @@ describe('degree', function() {
 		assert.ok(arrays_equal([ 4, 7, 11 ], x))
 
 		x = degree(2, modes["ionian"]) 
-		assert.ok(arrays_equal([ 2, 5, 9], x))
+		assert.ok(arrays_equal([
+			2, 5, 9], x))
+	})
+
+})
+
+describe('invert', function() {
+	it('should return the array unchanged', function() {
+		var x = inverter([0, 4, 7], 0)
+		assert.ok(arrays_equal([0, 4, 7]), x)
+	})
+
+	it('should invert chord correctly', function() {
+		var x = inverter([0, 4, 7], -2) 
+		assert.ok(arrays_equal([0, -8, -5]), x)
+		var x = inverter([0, 4, 7], 2) 
+		assert.ok(arrays_equal([12, 16, 7]), x)
 	})
 
 })
