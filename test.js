@@ -5,6 +5,10 @@
 var assert = require("assert")
 
 function arrays_equal(a,b) { 
+	if ( !(__.isArray(a) && __.isArray(b)) ) {
+		console.log(a, "??", b)
+		return false
+	}
 	var ret = !(a<b || b<a)
 	if ( ret )
 		return ret
@@ -14,6 +18,9 @@ function arrays_equal(a,b) {
 
 _gsClipStart = 0
 _gsClipEnd = 4
+
+// y = [ mkp( "0:0.75", choose(4, [ 60, 62, 64, 66]) ), mkp("0", "E2") ]
+// console.log(render_array(y))
 
 describe('timelist', function() {
 	it('should return array timestamp', function() {
@@ -41,10 +48,11 @@ describe('notelist', function() {
 	})
 
 	it('should return the right chords', function() {
-		var x = notelist("C3M:C3M^3:%^37")
+		var x = notelist("C3M:C3M^3:%^37:C3M>>")
 		assert.ok(arrays_equal([60, 64, 67], x[0]))
 		assert.ok(arrays_equal([64, 67, 71], x[1]))
 		assert.ok(arrays_equal([64, 67, 71, 74], x[2]))
+		assert.ok(arrays_equal([72, 76, 67], x[3]))
 	})
 })
 
@@ -105,8 +113,7 @@ describe('degree', function() {
 		assert.ok(arrays_equal([ 4, 7, 11 ], x))
 
 		x = degree(2, modes["ionian"]) 
-		assert.ok(arrays_equal([
-			2, 5, 9], x))
+		assert.ok(arrays_equal([2, 5, 9], x))
 	})
 
 })
@@ -114,14 +121,14 @@ describe('degree', function() {
 describe('invert', function() {
 	it('should return the array unchanged', function() {
 		var x = inverter([0, 4, 7], 0)
-		assert.ok(arrays_equal([0, 4, 7]), x)
+		assert.ok(arrays_equal([0, 4, 7], x))
 	})
 
 	it('should invert chord correctly', function() {
 		var x = inverter([0, 4, 7], -2) 
-		assert.ok(arrays_equal([0, -8, -5]), x)
+		assert.ok(arrays_equal([0, -8, -5], x))
 		var x = inverter([0, 4, 7], 2) 
-		assert.ok(arrays_equal([12, 16, 7]), x)
+		assert.ok(arrays_equal([12, 16, 7], x))
 	})
 
 })

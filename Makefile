@@ -1,5 +1,5 @@
-glasgow.js: max.js api.js modal.js vendor/underscore.js vendor/parks-lisp.js
-	cat max.js api.js modal.js vendor/underscore.js vendor/parks-lisp.js > build/glasgow.js
+glasgow.js: max.js api.js modal.js vendor/underscore.js
+	cat max.js api.js modal.js vendor/underscore.js > build/glasgow.js
 
 test:
 	cat api.js modal.js vendor/underscore.js test.js node-rt.js > build/mocha-test.js

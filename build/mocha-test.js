@@ -1,5 +1,9 @@
-// API
-_gsVersion = 0.2
+// ----------------------------------------------------------------------------
+// the Glasgow API.
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+// API version
+var _gsVersion = 0.2
 
 // This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
@@ -122,7 +126,7 @@ function mkp(tm, note, velo, dur, start, end) {
    }
 
    if (i >= 1024) {
-      throw "got stuck in a loop in mkp. See your iterators: " + i
+      throw "got stuck in a loop in mkp. See your iterators: " + i + " clipEnd:" + _gsClipEnd
    }
 
    return ret
@@ -130,7 +134,7 @@ function mkp(tm, note, velo, dur, start, end) {
 
 
 function timelist(tm) {
-   glasgow_info("time: " + tm)
+   //glasgow_info("time: " + tm)
    var tms = tm.split(":")
    var ret = []
    for (i in tms) {
@@ -190,8 +194,8 @@ function rendernote(str, chord) {
                case 'E' : z = 4; state=1; break
                case 'F' : z = 5; state=1; break
                case 'G' : z = 7; state=1; break
-               case 'A' : z = -3; state=1; break
-               case 'B' : z = -1; state=1; break
+               case 'A' : z = 9; state=1; break
+               case 'B' : z = 11; state=1; break
                case 'C' : z = 0; state=1; break
                default :
                   throw "unknown note"
@@ -218,22 +222,15 @@ function rendernote(str, chord) {
             break;
 
          // mode name
-         case 2:
-            if (cur==' ') {
-               if ( buff.length != 0 ) {
-                  m = buff.join('')
-                  _gsLastMode = m
-                  buff = []
-               }
-               break
-            }         
+         case 2:      
             if (ischar(cur)) {
                buff.push(cur)
                break
             } 
 
             if (cur == '^') {
-               // parse chord name
+               m = buff.join('')
+               // parse chord degree
                buff = []
                state = 3
                break;
@@ -241,15 +238,19 @@ function rendernote(str, chord) {
 
             if (isnum(cur)) {
                // jump to voicing
+               m = buff.join('')
                buff = [ cur ] 
                state = 5
                break;
             }
 
-            buff.push(cur)
-            m = buff.join('')
-            _gsLastMode = m
-            
+            if ( buff.length != 0 ) {
+               m = buff.join('')
+               buff = []
+            }            
+            state = 5
+            if (cur != ' ')
+               i--
          break
 
          // degree name
@@ -296,8 +297,7 @@ function rendernote(str, chord) {
             case '>' :
                inv++
             break
-            case 'r' :
-            case 'R' :
+            case '$' :
                r = 1
             }
          break
@@ -312,14 +312,15 @@ function rendernote(str, chord) {
    if ( m == null ) {
       return chord.push(z)
    }
-
+   _gsLastMode = m
    if ( v.length == 0 )
       v = null
 
+
    var notes = degree(d, m, v, r)
    inverter(notes, inv)
-   addl(z, notes)
 
+   addl(z, notes)
    chord.push(notes)
 }
 
@@ -421,8 +422,7 @@ function addl(v, lst) {
 function choose(times, lst, prob) {
    var ret = []
 
-   if(__.isUndefined(prob)) {
-      prob == null
+   if(__.isUndefined(prob)) { 
       for (var i = 0; i < times; i++) {
          ret.push(lst[__.random(0, lst.length - 1)])
       }
@@ -432,9 +432,11 @@ function choose(times, lst, prob) {
             prob.push(0.5)
          }
       }
-      tmp = prob.slice(0)
-      __.map(tmp, function(x) { return Math.random() + x })
-      ret.push(lst[__.indexOf(tmp, __.max(tmp))])
+      for (var i=0;i<times;i++) {
+         tmp = prob.slice(0)
+         __.map(tmp, function(x) { return Math.random() + x })
+         ret.push(lst[__.indexOf(tmp, __.max(tmp))])
+      }
    }
    return ret;
 }
@@ -534,7 +536,44 @@ IterDone.prototype.next = function() {
     }
     return this.lst[this.i]
 }
-// modal stuff
+
+
+function render_array(a) {
+   ret = "["
+   f1 = ""
+   for (i = 0; i < a.length; i++) {
+      if (__.isArray(a[i])) {
+         ret += f1 + "["
+         f2 = ""
+         for (j = 0; j < a[i].length; j++) {
+            if ( __.isArray(a[i][j])) {
+               ret += f2 + "["
+               f2 = ""
+               for(k=0;k < a[i][j].length; k++) {
+                  ret += f2 + a[i][j][k]
+                  f2 = ", "
+               }
+               f2 = ", "
+               ret += "]"
+            } else { 
+               ret += f2 + a[i][j]
+               f2 = ", "
+            }
+
+         }
+         ret += "]"
+      } else {
+         ret += f1 + String(a[i])
+      }
+      f1 = ", "
+   }
+   return ret + "]"
+}
+
+// ----------------------------------------------------------------------------
+// the modal (music theory) stuff
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 modes = {
 
    "ionian": [2, 2, 1, 2, 2, 2, 1],
@@ -545,7 +584,6 @@ modes = {
    "aeolian": [2, 1, 2, 2, 1, 2, 2],
    "locrian": [1, 2, 2, 1, 2, 2, 2],
 
-
    // synonyms
 
    "M": [2, 2, 1, 2, 2, 2, 1],
@@ -553,7 +591,6 @@ modes = {
 }
 
 // degree(degree, mode, voices, resticted_class)
-
 function degree(d, m, v, r) {
    if (__.isString(m)) {
       m = modes[m]
@@ -602,6 +639,9 @@ function degree(d, m, v, r) {
 }
 
 function inverter(def, lvl) {
+   if ( lvl == 0 )
+      return def
+
    var oz = 0
    for(var i=0;i<def.length;i++) {
       if ( oz < Math.floor(def[i] / 12) )
@@ -612,7 +652,7 @@ function inverter(def, lvl) {
       lvl *= -1
       if (lvl>def.length)
          lvl = def.length
-      for(i=def.length-1;i>def.length-lvl;i--) 
+      for(i=def.length-1;i>=def.length-lvl;i--) 
          def[i] = def[i] - oz
    } else {
       if (lvl>def.length)
@@ -621,7 +661,9 @@ function inverter(def, lvl) {
          def[i] = def[i] + oz
    }
    return def
-}//     Underscore.js 1.4.2
+}
+
+//     Underscore.js 1.4.2
 //     http://underscorejs.org
 //     (c) 2009-2012 Jeremy Ashkenas, DocumentCloud Inc.
 //     Underscore may be freely distributed under the MIT license.
@@ -1824,10 +1866,17 @@ function inverter(def, lvl) {
   });
 
 }).call(this);
-
+// ----------------------------------------------------------------------------
+// mocha tests
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 var assert = require("assert")
 
 function arrays_equal(a,b) { 
+	if ( !(__.isArray(a) && __.isArray(b)) ) {
+		console.log(a, "??", b)
+		return false
+	}
 	var ret = !(a<b || b<a)
 	if ( ret )
 		return ret
@@ -1837,6 +1886,9 @@ function arrays_equal(a,b) {
 
 _gsClipStart = 0
 _gsClipEnd = 4
+
+// y = [ mkp( "0:0.75", choose(4, [ 60, 62, 64, 66]) ), mkp("0", "E2") ]
+// console.log(render_array(y))
 
 describe('timelist', function() {
 	it('should return array timestamp', function() {
@@ -1864,10 +1916,11 @@ describe('notelist', function() {
 	})
 
 	it('should return the right chords', function() {
-		var x = notelist("C3M:C3M^3:%^37")
+		var x = notelist("C3M:C3M^3:%^37:C3M>>")
 		assert.ok(arrays_equal([60, 64, 67], x[0]))
 		assert.ok(arrays_equal([64, 67, 71], x[1]))
 		assert.ok(arrays_equal([64, 67, 71, 74], x[2]))
+		assert.ok(arrays_equal([72, 76, 67], x[3]))
 	})
 })
 
@@ -1928,8 +1981,7 @@ describe('degree', function() {
 		assert.ok(arrays_equal([ 4, 7, 11 ], x))
 
 		x = degree(2, modes["ionian"]) 
-		assert.ok(arrays_equal([
-			2, 5, 9], x))
+		assert.ok(arrays_equal([2, 5, 9], x))
 	})
 
 })
@@ -1937,17 +1989,22 @@ describe('degree', function() {
 describe('invert', function() {
 	it('should return the array unchanged', function() {
 		var x = inverter([0, 4, 7], 0)
-		assert.ok(arrays_equal([0, 4, 7]), x)
+		assert.ok(arrays_equal([0, 4, 7], x))
 	})
 
 	it('should invert chord correctly', function() {
 		var x = inverter([0, 4, 7], -2) 
-		assert.ok(arrays_equal([0, -8, -5]), x)
+		assert.ok(arrays_equal([0, -8, -5], x))
 		var x = inverter([0, 4, 7], 2) 
-		assert.ok(arrays_equal([12, 16, 7]), x)
+		assert.ok(arrays_equal([12, 16, 7], x))
 	})
 
 })
+
+// ----------------------------------------------------------------------------
+// Stuff that gets defined in max.js (not included when running in node)
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 
 function glasgow_info(msg) {
 	console.log(msg)
@@ -1956,3 +2013,4 @@ function glasgow_info(msg) {
 function glasgow_error(msg) {
 	console.error(msg)
 }
+

@@ -126,7 +126,7 @@ function mkp(tm, note, velo, dur, start, end) {
    }
 
    if (i >= 1024) {
-      throw "got stuck in a loop in mkp. See your iterators: " + i
+      throw "got stuck in a loop in mkp. See your iterators: " + i + " clipEnd:" + _gsClipEnd
    }
 
    return ret
@@ -134,7 +134,7 @@ function mkp(tm, note, velo, dur, start, end) {
 
 
 function timelist(tm) {
-   glasgow_info("time: " + tm)
+   //glasgow_info("time: " + tm)
    var tms = tm.split(":")
    var ret = []
    for (i in tms) {
@@ -194,8 +194,8 @@ function rendernote(str, chord) {
                case 'E' : z = 4; state=1; break
                case 'F' : z = 5; state=1; break
                case 'G' : z = 7; state=1; break
-               case 'A' : z = -3; state=1; break
-               case 'B' : z = -1; state=1; break
+               case 'A' : z = 9; state=1; break
+               case 'B' : z = 11; state=1; break
                case 'C' : z = 0; state=1; break
                default :
                   throw "unknown note"
@@ -222,22 +222,15 @@ function rendernote(str, chord) {
             break;
 
          // mode name
-         case 2:
-            if (cur==' ') {
-               if ( buff.length != 0 ) {
-                  m = buff.join('')
-                  _gsLastMode = m
-                  buff = []
-               }
-               break
-            }         
+         case 2:      
             if (ischar(cur)) {
                buff.push(cur)
                break
             } 
 
             if (cur == '^') {
-               // parse chord name
+               m = buff.join('')
+               // parse chord degree
                buff = []
                state = 3
                break;
@@ -245,15 +238,19 @@ function rendernote(str, chord) {
 
             if (isnum(cur)) {
                // jump to voicing
+               m = buff.join('')
                buff = [ cur ] 
                state = 5
                break;
             }
 
-            buff.push(cur)
-            m = buff.join('')
-            _gsLastMode = m
-            
+            if ( buff.length != 0 ) {
+               m = buff.join('')
+               buff = []
+            }            
+            state = 5
+            if (cur != ' ')
+               i--
          break
 
          // degree name
@@ -300,8 +297,7 @@ function rendernote(str, chord) {
             case '>' :
                inv++
             break
-            case 'r' :
-            case 'R' :
+            case '$' :
                r = 1
             }
          break
@@ -316,14 +312,15 @@ function rendernote(str, chord) {
    if ( m == null ) {
       return chord.push(z)
    }
-
+   _gsLastMode = m
    if ( v.length == 0 )
       v = null
 
+
    var notes = degree(d, m, v, r)
    inverter(notes, inv)
-   addl(z, notes)
 
+   addl(z, notes)
    chord.push(notes)
 }
 
@@ -425,8 +422,7 @@ function addl(v, lst) {
 function choose(times, lst, prob) {
    var ret = []
 
-   if(__.isUndefined(prob)) {
-      prob == null
+   if(__.isUndefined(prob)) { 
       for (var i = 0; i < times; i++) {
          ret.push(lst[__.random(0, lst.length - 1)])
       }
@@ -436,9 +432,11 @@ function choose(times, lst, prob) {
             prob.push(0.5)
          }
       }
-      tmp = prob.slice(0)
-      __.map(tmp, function(x) { return Math.random() + x })
-      ret.push(lst[__.indexOf(tmp, __.max(tmp))])
+      for (var i=0;i<times;i++) {
+         tmp = prob.slice(0)
+         __.map(tmp, function(x) { return Math.random() + x })
+         ret.push(lst[__.indexOf(tmp, __.max(tmp))])
+      }
    }
    return ret;
 }
@@ -537,5 +535,38 @@ IterDone.prototype.next = function() {
         return null
     }
     return this.lst[this.i]
+}
+
+
+function render_array(a) {
+   ret = "["
+   f1 = ""
+   for (i = 0; i < a.length; i++) {
+      if (__.isArray(a[i])) {
+         ret += f1 + "["
+         f2 = ""
+         for (j = 0; j < a[i].length; j++) {
+            if ( __.isArray(a[i][j])) {
+               ret += f2 + "["
+               f2 = ""
+               for(k=0;k < a[i][j].length; k++) {
+                  ret += f2 + a[i][j][k]
+                  f2 = ", "
+               }
+               f2 = ", "
+               ret += "]"
+            } else { 
+               ret += f2 + a[i][j]
+               f2 = ", "
+            }
+
+         }
+         ret += "]"
+      } else {
+         ret += f1 + String(a[i])
+      }
+      f1 = ", "
+   }
+   return ret + "]"
 }
 

@@ -12,7 +12,6 @@ modes = {
    "aeolian": [2, 1, 2, 2, 1, 2, 2],
    "locrian": [1, 2, 2, 1, 2, 2, 2],
 
-
    // synonyms
 
    "M": [2, 2, 1, 2, 2, 2, 1],
@@ -68,6 +67,9 @@ function degree(d, m, v, r) {
 }
 
 function inverter(def, lvl) {
+   if ( lvl == 0 )
+      return def
+
    var oz = 0
    for(var i=0;i<def.length;i++) {
       if ( oz < Math.floor(def[i] / 12) )
@@ -78,7 +80,7 @@ function inverter(def, lvl) {
       lvl *= -1
       if (lvl>def.length)
          lvl = def.length
-      for(i=def.length-1;i>def.length-lvl;i--) 
+      for(i=def.length-1;i>=def.length-lvl;i--) 
          def[i] = def[i] - oz
    } else {
       if (lvl>def.length)

@@ -34,10 +34,11 @@ If you start a new note with '%', it will reassign the last note and mode select
        |   mode name 
        |   |   chord degree value
        |   |   |   forces the chord to be in same octave
-       |   |   |   | 
-       C 3 M ^ 3 7 & >>
+       |   |   |   |   makes invertions to chords (>> makes 2 invertion to the right)
+       |   |   |   |   | 
+       C 3 M ^ 3 7 & $ >> 
        | |   |   |   | 
-       | |   |   |   tells the invertions of the chords
+       | |   |   |   tells the chord to fit in 1 octave (restrict class)
        | |   |   add the 7th to the chord
        | |   forces the parser to also read chord degree (I, ii, III, iv ....)
        | octave value
@@ -82,8 +83,8 @@ exttm(clip) - returns the timestamps (time format) form the current or specified
 
 extnote(clip) - returns the notes (note format) from the current or specified clip.
 
-interface protocol
-------------------
+interface protocol (raw clip format)
+------------------------------------
 The interface that is used to get or set a Abelton Live clip is a simple array that
 contains the note event. If you don't like the glasgow API, you can make on your own 
 but still use this format to send/receive notes from Live :
@@ -98,6 +99,8 @@ changelog
 - Added chord functionality
 - Added extnote, extnote, exttm, extrhythm to extract values from original clip contents
 - String note value are now based on the Live numbering for the octave (from C-2 to B9)
+- Added 2 textedit for code and the other for clip content extraction
+- Undo is now based on the last content of the clip and not the code
 
 todo
 ----

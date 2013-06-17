@@ -1,3 +1,8 @@
+// ----------------------------------------------------------------------------
+// the Max/MSP related interface
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+
 inlets = 1
 outlets = 2
 
@@ -5,6 +10,8 @@ var undo_buffer = []
 
 // the value of code window in max
 var current_code = ""
+
+// THIS PORTION IS CALLED BY MAX (with the first letter of the function in upper case)
 
 // called by max to update the textedit containing the code value
 function UpdateCode(code, text) {
@@ -17,120 +24,62 @@ function UpdateCode(code, text) {
 }
 
 
-
+// Get the currently selected clip and paste it's value in the clip field.
 function GetClip() {
    fillGlobalVar()
-   api = new LiveAPI("live_set view detail_clip");
-   selected = api.call("select_all_notes");
-   rawNotes = api.call("get_selected_notes");
+   var content = getclip_content()
 
-   if (rawNotes[0] !== "notes") {
-      glasgow_error("Unexpected note output!");
-      return;
+   if ( _.isString(content) ) {
+      glasgow_error(content)
    }
 
-   _gsLastGetClip = []
-   maxNumNotes = rawNotes[1];
-
-   for (var i = 2; i < (maxNumNotes * 6); i += 6) {
-      var note = rawNotes[i + 1]
-      var tm = rawNotes[i + 2]
-      var dur = rawNotes[i + 3]
-      var velo = rawNotes[i + 4]
-      var muted = rawNotes[i + 5] === 1
-
-      // if this is a valid note
-      if (rawNotes[i] === "note" && _.isNumber(note) && _.isNumber(tm) && _.isNumber(dur) && _.isNumber(velo)) {
-         _gsLastGetClip.push( [ tm, note, velo, dur ] )
-      } else {
-         glasgow_error("unkown note returned by Live")
-         return
-      }
-   }
-
-   /* Live doesnt return the events in a sorted order. We do: <3 underscore */
-   _gsLastGetClip = __.sortBy(_gsLastGetClip, function(n) { n[0] })
-   first = ""
-   ret = "["
+   _gsLastGetClip = content
+   var first = ""
+   var ret = "["
    for(var i=0;i<_gsLastGetClip.length;i++) {
          ret = ret + first + "[" + _gsLastGetClip[i][0] + ", " + _gsLastGetClip[i][1] + ", " + _gsLastGetClip[i][2] + ", " + _gsLastGetClip[i][3] + "]"
          first = ",\n"
    }
    ret = ret + "]"
-   push_undo()
    outlet(1, 'set', ret)
+
    glasgow_info("GetClip successful")
 }
 
 
+// Evaluate the code window and update the clip content with this array
 function PutClip() {
    var out = evalcode()
    if (out == null)
       return;
 
    if (!_.isArray(out)) {
-      glasgow_error("evaluation is not a array")
+      glasgow_error("Code didn't returned an array")
       return;
    }
    if (out.length == 0) {
-      glasgow_error("array is empty")
+      glasgow_error("Array is empty")
       return;
    }
 
-   var success = 1
-   var out = _.flatten(out, true)
-   var api = new LiveAPI("live_set view detail_clip");
-   api.call("select_all_notes");
-   api.call("replace_selected_notes");
-   api.call("notes", out.length)
-   for (i = 0; i < out.length; i++) {
-      if (out[i].length != 4) {
-         glasgow_info(out)
-         glasgow_error("skipping content of wrong size, index: " + i)
-         success = 0
-         break
-      }
-
-      // pitch time duration velocity muted
-      tm = Number(out[i][0]).toFixed(12)
-      note = out[i][1]
-      velo = out[i][2]
-      dur = Number(out[i][3]).toFixed(12)
-
-      if (_.isNaN(tm)) {
-         glasgow_error("wrong time defined : " + tm + ", index: " + i)
-         success = 0
-         break
-      }
-
-      if (_.isNaN(note)) {
-         glasgow_error("wrong note defined : " + note + ", index: " + i)
-         success = 0
-         break
-      }
-
-      if (_.isNaN(velo)) {
-         glasgow_error("wrong velocity defined : " + velo + ", index: " + i)
-         success = 0
-         break
-      }
-
-      if (_.isNaN(dur)) {
-         glasgow_error("wrong duration defined : " + dur + ", index: " + i)
-         success = 0
-         break
-      }
-
-      ln = ["note", note, tm, dur, velo, 0]
-      api.call(ln)
+   out = flatten_event(out)
+   out = validateclip_content(out)
+   if ( _.isString(out) ) {
+      glasgow_error(out)
+      return;
    }
-   api.call("done")
-   if (success == 1) {
-      glasgow_info("PutClip successful")
-   }
+   
+   if (undo_buffer.length > 30)
+      undo_buffer.shift()
+   undo_buffer.push(getclip_content())
+   out = putclip_content(out)
+
+   glasgow_info("PutClip successful")
 }
 
 
+// Evaluate the code window and return the result in the status. If it is an
+// array, it will be put in the "clip" field
 function Evaluate() {
    out = evalcode()
    if (out == null)
@@ -138,37 +87,40 @@ function Evaluate() {
 
    outstr = String(out)
    if (_.isNumber(out)) {
-      glasgow_info("result: " + outstr)
+      glasgow_info("Result: " + outstr)
       return;
    }
 
    if (_.isString(out)) {
-      glasgow_info("result: " + outstr)
+      glasgow_info("Result: " + outstr)
       return;
    }
 
    if (_.isArray(out)) {
-      push_undo()
       outlet(1, "set", render_array(out))
-      glasgow_info("done changed")
+      glasgow_info("The array is put in clip field")
       return;
    }
-   glasgow_error("unkown type")
-
+   glasgow_error("Unkown type")
 }
 
 
+// replace the content of the current selected clip with the content that was in the 
+// clip before "PutClip" was called.
 function Undo() {
    if (undo_buffer.length > 0) {
-      undo_content = undo_buffer.pop()
-      outlet(1, "set", undo_content)
+      var lastclip = undo_buffer.pop()
+      lastclip = validateclip_content(lastclip)
+      lastclip = putclip_content(lastclip)
+      glasgow_info("Undo successful")
+   } else {
+      glasgow_info("No content in undo buffer")
    }
 }
 
 
-/**
- * Will work in the future 
- */
+// If the user wants to add extra library
+// not implemented yet. 
 function LoadLib() {
    folder = new Folder("glasgow-lib");
 
@@ -189,18 +141,105 @@ function LoadLib() {
    f.close()  */
 }
 
+// NOT CALLED BY MAX
+
+function getclip_content() {
+   fillGlobalVar()
+   var api = new LiveAPI("live_set view detail_clip");
+   var selected = api.call("select_all_notes");
+   var rawNotes = api.call("get_selected_notes");
+
+   if (rawNotes[0] !== "notes") {
+      return "Unexpected note output!"
+   }
+
+   var newclip = []
+   var maxNumNotes = rawNotes[1];
+
+   for (var i = 2; i < (maxNumNotes * 6); i += 6) {
+      var note = rawNotes[i + 1]
+      var tm = rawNotes[i + 2]
+      var dur = rawNotes[i + 3]
+      var velo = rawNotes[i + 4]
+      var muted = rawNotes[i + 5] === 1
+
+      // if this is a valid note
+      if (rawNotes[i] === "note" && _.isNumber(note) && _.isNumber(tm) && _.isNumber(dur) && _.isNumber(velo)) {
+         newclip.push( [ tm, note, velo, dur ] )
+      } else {
+         return "unkown note returned by Live"
+      }
+   }
+
+   /* Live doesnt return the events in a sorted order. We do: <3 underscore */
+   newclip = __.sortBy(newclip, function(n) { n[0] })
+   return newclip
+}
+
+
+// Validate the content of the Glasgow array; returns the array format in 
+// Live format. Returns a string with the error if it was unable to parse
+// the array.
+function validateclip_content(clip) {
+   var ret = []
+   for (var i = 0; i < clip.length; i++) {
+      if (clip[i].length != 4) {
+         return "skipping content of wrong size, index:"  + i + "clip content: " + clip[i]
+         break
+      }
+
+      // pitch time duration velocity muted
+      var tm = Number(clip[i][0]).toFixed(12)
+      var note = clip[i][1]
+      var velo = clip[i][2]
+      var dur = Number(clip[i][3]).toFixed(12)
+
+      if (_.isNaN(tm)) {
+         return "wrong time defined : " + tm + ", index: " + i
+      }
+
+      if (_.isNaN(note)) {
+         return "wrong note defined : " + note + ", index: " + i
+      }
+
+      if (_.isNaN(velo)) {
+         return "wrong velocity defined : " + velo + ", index: " + i
+      }
+
+      if (_.isNaN(dur)) {
+         return "wrong duration defined : " + dur + ", index: " + i
+      }         
+
+      ret.push(["note", note, tm, dur, velo, 0])
+   }
+   return ret
+}
+
+
+// Put the array content into the clip; must be used with the validateclip_content
+function putclip_content(clip) {
+   var api = new LiveAPI("live_set view detail_clip");
+   api.call("select_all_notes");
+   api.call("replace_selected_notes");
+   api.call("notes", clip.length)
+   for (i = 0; i < clip.length; i++) {
+      api.call(clip[i])
+   }
+   return api.call("done")
+}
+
 
 function evalcode() {
    fillGlobalVar()
    try {
       /* undocumented feature, if it starts with ( it is considered a
-         lisp snippet */
+         lisp snippet 
       if ( current_code.charAt(0) == '(') {
          glasgow_info("using lisp engine to parse snippet")
          out = interpret(current_code)
-      } else {
+      } else {*/
          out = eval(current_code)
-      }
+      /*}*/
    } catch (err) {
       glasgow_error(String(err))
       out = null
@@ -209,46 +248,20 @@ function evalcode() {
 }
 
 
-function render_array(a) {
-   ret = "["
-   f1 = ""
-   for (i = 0; i < a.length; i++) {
-      if (_.isArray(a[i])) {
-         ret += f1 + " ["
-         f2 = ""
-         for (j = 0; j < a[i].length; j++) {
-            ret += f2 + a[i][j]
-            f2 = " ,"
-         }
-         ret += "]"
-      } else {
-         ret += f1 + String(a[i])
-      }
-      f1 = " ,\n"
-   }
-   glasgow_info(ret)
-   return ret + "]"
-}
-
-
-function push_undo() {
-   if (undo_buffer.length > 30)
-      undo_buffer.shift()
-   if (undo_buffer.length != 0) {
-      tst_last = undo_buffer.pop()
-      undo_buffer.push(tst_last)
-      if (tst_last != current_code)
-         undo_buffer.push(current_code)
-   } else {
-      undo_buffer.push(current_code)
-   }
-}
 
 
 function fillGlobalVar() {
    api = new LiveAPI("live_set view detail_clip");
    _gsClipStart = api.get("loop_start")[0]
    _gsClipEnd = api.get("loop_end")[0]
+
+    if ( _.isUndefined(_gsClipStart) ) {
+      _gsClipStart = 0
+    }
+
+    if ( _.isUndefined(_gsClipEnd) ) {
+      _gsClipEnd = 4
+    }   
 }
 
 
@@ -266,9 +279,33 @@ function glasgow_error(msg) {
 }
 
 
+
+function flatten_event(lst) {
+   var ret = new Array()
+   for(var i=0;i<lst.length;i++) {
+      if ( __.isArray(lst[i]) ) {
+
+         if ( __.isArray(lst[i][0]) ) {
+            for(var j=0;j<lst[i].length;j++) {
+               ret.push(lst[i][j])
+            }
+         } else {
+            ret.push(lst[i])
+         }
+      } 
+   }
+   return ret;
+}
+
 // hack to support underscore in max/msp :(
-__ = _// API
-_gsVersion = 0.2
+__ = _
+
+// ----------------------------------------------------------------------------
+// the Glasgow API.
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+// API version
+var _gsVersion = 0.2
 
 // This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
@@ -391,7 +428,7 @@ function mkp(tm, note, velo, dur, start, end) {
    }
 
    if (i >= 1024) {
-      throw "got stuck in a loop in mkp. See your iterators: " + i
+      throw "got stuck in a loop in mkp. See your iterators: " + i + " clipEnd:" + _gsClipEnd
    }
 
    return ret
@@ -399,7 +436,7 @@ function mkp(tm, note, velo, dur, start, end) {
 
 
 function timelist(tm) {
-   glasgow_info("time: " + tm)
+   //glasgow_info("time: " + tm)
    var tms = tm.split(":")
    var ret = []
    for (i in tms) {
@@ -432,9 +469,7 @@ function ischar(chr) {
 }
 
 
-// note format: notename mode degre voices (<< >> inversion)
-//
-// D-3M0^7<< : %3> : %1^7^13
+// render note (or chord)
 function rendernote(str, chord) {
    str = str.trim().split('')
    str.push(' ')
@@ -461,8 +496,8 @@ function rendernote(str, chord) {
                case 'E' : z = 4; state=1; break
                case 'F' : z = 5; state=1; break
                case 'G' : z = 7; state=1; break
-               case 'A' : z = -3; state=1; break
-               case 'B' : z = -1; state=1; break
+               case 'A' : z = 9; state=1; break
+               case 'B' : z = 11; state=1; break
                case 'C' : z = 0; state=1; break
                default :
                   throw "unknown note"
@@ -489,22 +524,15 @@ function rendernote(str, chord) {
             break;
 
          // mode name
-         case 2:
-            if (cur==' ') {
-               if ( buff.length != 0 ) {
-                  m = buff.join('')
-                  _gsLastMode = m
-                  buff = []
-               }
-               break
-            }         
+         case 2:      
             if (ischar(cur)) {
                buff.push(cur)
                break
             } 
 
             if (cur == '^') {
-               // parse chord name
+               m = buff.join('')
+               // parse chord degree
                buff = []
                state = 3
                break;
@@ -512,15 +540,19 @@ function rendernote(str, chord) {
 
             if (isnum(cur)) {
                // jump to voicing
+               m = buff.join('')
                buff = [ cur ] 
                state = 5
                break;
             }
 
-            buff.push(cur)
-            m = buff.join('')
-            _gsLastMode = m
-            
+            if ( buff.length != 0 ) {
+               m = buff.join('')
+               buff = []
+            }            
+            state = 5
+            if (cur != ' ')
+               i--
          break
 
          // degree name
@@ -567,8 +599,7 @@ function rendernote(str, chord) {
             case '>' :
                inv++
             break
-            case 'r' :
-            case 'R' :
+            case '$' :
                r = 1
             }
          break
@@ -583,14 +614,15 @@ function rendernote(str, chord) {
    if ( m == null ) {
       return chord.push(z)
    }
-
+   _gsLastMode = m
    if ( v.length == 0 )
       v = null
 
+
    var notes = degree(d, m, v, r)
    inverter(notes, inv)
-   addl(z, notes)
 
+   addl(z, notes)
    chord.push(notes)
 }
 
@@ -614,14 +646,70 @@ function notelist(note) {
 }
 
 
+// extract note
 function extnote(clip) {
+   if (clip.length==0)
+      return []
 
+   var ret = [ ]
+   var tmp = [ clip[0][1] ]
+   var lasttm = clip[0][0]
+
+   for(i=1;i<clip.length;i++) {
+      if (lasttm == clip[i][0] ) {
+         tmp.push(clip[i][1])
+      } else {
+         if (tmp.length == 1) {
+            ret.push(tmp[0])
+         } else {
+            ret.push(tmp)
+         }
+         tmp = [ clip[i][1] ]
+         lasttm = clip[i][0]
+      }
+   }
+
+   if (tmp.length == 1) {
+      ret.push(tmp[0])
+   } else {
+      ret.push(tmp)
+   }   
+   return ret
 }
 
+// extract time
 function exttm(clip) {
-   
+   if ( clip.length == 0 )
+      return []
+
+   var lasttm = clip[0][0]
+   var ret = [ lasttm ]
+   for(i=1;i<clip.length;i++) {
+      if (lasttm != clip[i][0]) {
+         lasttm = clip[i][0]
+         ret.push(lasttm)
+      }
+   }
+   return ret
 }
 
+// extract rhythm 
+function extrhythm(clip) {
+   if(clip.length==0)
+      return []
+
+   ret = {}
+   for(i=0;i<clip.length;i++) {
+      tm = clip[i][0]
+      nt = clip[i][1]
+      if (__.isUndefined(ret[tm])) { 
+         ret[tm] = [ nt ]
+      } else {
+         ret[tm].push(nt)
+      }
+   }
+   return ret
+}
 
 // adds the value of 'v' to all the elements in the 'lst' array
 function addl(v, lst) {
@@ -633,15 +721,37 @@ function addl(v, lst) {
 
 // randomly chooses an element in 'lst', puts the result in returned array 
 // 'times' times.
-function choose(times, lst) {
+function choose(times, lst, prob) {
    var ret = []
-   for (var i = 0; i < times; i++) {
-      ret.push(lst[__.random(0, lst.length - 1)])
+
+   if(__.isUndefined(prob)) { 
+      for (var i = 0; i < times; i++) {
+         ret.push(lst[__.random(0, lst.length - 1)])
+      }
+   } else {
+      if ( prob.length < lst.length ) {
+         for(var i=lst.length-prop.length;i<lst.length;i++) {
+            prob.push(0.5)
+         }
+      }
+      for (var i=0;i<times;i++) {
+         tmp = prob.slice(0)
+         __.map(tmp, function(x) { return Math.random() + x })
+         ret.push(lst[__.indexOf(tmp, __.max(tmp))])
+      }
    }
    return ret;
 }
 
 
+
+/**
+ * Iterators are use to loop over a list.
+ * 
+ * Iterator(lst) - constructor, takes a list
+ * Iterator.next - returns the next element, null if N/A
+ * Iterator.peek - returns the next element but doesn't iterate the object, null if N/A
+ */
 function IterLoop(lst) {
    this.i = -1;
    this.lst = lst
@@ -728,7 +838,44 @@ IterDone.prototype.next = function() {
     }
     return this.lst[this.i]
 }
-// modal stuff
+
+
+function render_array(a) {
+   ret = "["
+   f1 = ""
+   for (i = 0; i < a.length; i++) {
+      if (__.isArray(a[i])) {
+         ret += f1 + "["
+         f2 = ""
+         for (j = 0; j < a[i].length; j++) {
+            if ( __.isArray(a[i][j])) {
+               ret += f2 + "["
+               f2 = ""
+               for(k=0;k < a[i][j].length; k++) {
+                  ret += f2 + a[i][j][k]
+                  f2 = ", "
+               }
+               f2 = ", "
+               ret += "]"
+            } else { 
+               ret += f2 + a[i][j]
+               f2 = ", "
+            }
+
+         }
+         ret += "]"
+      } else {
+         ret += f1 + String(a[i])
+      }
+      f1 = ", "
+   }
+   return ret + "]"
+}
+
+// ----------------------------------------------------------------------------
+// the modal (music theory) stuff
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
 modes = {
 
    "ionian": [2, 2, 1, 2, 2, 2, 1],
@@ -739,7 +886,6 @@ modes = {
    "aeolian": [2, 1, 2, 2, 1, 2, 2],
    "locrian": [1, 2, 2, 1, 2, 2, 2],
 
-
    // synonyms
 
    "M": [2, 2, 1, 2, 2, 2, 1],
@@ -747,7 +893,6 @@ modes = {
 }
 
 // degree(degree, mode, voices, resticted_class)
-
 function degree(d, m, v, r) {
    if (__.isString(m)) {
       m = modes[m]
@@ -796,22 +941,31 @@ function degree(d, m, v, r) {
 }
 
 function inverter(def, lvl) {
+   if ( lvl == 0 )
+      return def
+
    var oz = 0
    for(var i=0;i<def.length;i++) {
-      if ( oz < def[i] % 12 )
-         oz = def[i] % 12
+      if ( oz < Math.floor(def[i] / 12) )
+         oz = Math.floor(def[i] / 12)
    }
-
+   oz = oz * 12 + 12
    if(lvl < 0) {
-      for(i=def.length-1;i>0;i++) 
+      lvl *= -1
+      if (lvl>def.length)
+         lvl = def.length
+      for(i=def.length-1;i>=def.length-lvl;i--) 
          def[i] = def[i] - oz
    } else {
-      for(i=0;i>def.length;i++) 
+      if (lvl>def.length)
+         lvl = def.length
+      for(i=0;i<lvl;i++) 
          def[i] = def[i] + oz
    }
-
    return def
-}//     Underscore.js 1.4.2
+}
+
+//     Underscore.js 1.4.2
 //     http://underscorejs.org
 //     (c) 2009-2012 Jeremy Ashkenas, DocumentCloud Inc.
 //     Underscore may be freely distributed under the MIT license.
@@ -2014,1450 +2168,3 @@ function inverter(def, lvl) {
   });
 
 }).call(this);
-// File: lisp.js
-//                        
-// Author: Paul M. Parks
-// 
-// Purpose: 
-// An implementation of Lisp in JavaScript.
-// 
-// Comments: 
-//
-// Greenspun's Tenth Rule of Programming: "Any sufficiently complicated
-// C or Fortran program contains an ad-hoc, informally-specified
-// bug-ridden slow implementation of half of Common Lisp."
-//
-// I suppose we can add JavaScript to that list, now.
-// 
-// Contact:
-// 
-// paul@parkscomputing.com
-// http://www.parkscomputing.com/
-// 
-// License:
-// 
-// Copyright (c) 2005, Paul M. Parks
-// All Rights Reserved.
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions 
-// are met:
-// 
-// * Redistributions of source code must retain the above copyright 
-//   notice, this list of conditions and the following disclaimer.
-// 
-// * Redistributions in binary form must reproduce the above 
-//   copyright notice, this list of conditions and the following 
-//   disclaimer in the documentation and/or other materials provided 
-//   with the distribution.
-// 
-// * Neither the name of Paul M. Parks nor the names of his 
-//   contributors may be used to endorse or promote products derived 
-//   from this software without specific prior written permission.
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
-// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
-// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
-// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
-// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
-// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN 
-// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
-// THE POSSIBILITY OF SUCH DAMAGE.
-//
-
-
-var Lisp = new Object();
-
-
-Lisp.showSource = function() {};
-Lisp.debug = function(str) {};
-Lisp.oneval = function(value) {};
-
-
-Lisp.functions = new Object();
-
-this["apropos"] = new function()
-{
-};
-
-this["apropos"].__documentation = "Display a list of symbols that are a partial match to the provided string.";
-
-
-this["apropos"].entries = new Object();
-
-
-this["t"] = this["T"] = true;
-
-// Oh, my, what a horrible attempt at case-insensivity. Shoot me.
-this["nil"] = this["Nil"] = this["nIl"] = this["NIl"] =
-this["niL"] = this["NiL"] = this["nIL"] = this["NIL"] = new Array();
-
-// Sorry, functions are all-caps. I'm not committing the above
-// crime for everything. The evaluation engine will convert to
-// all-caps before calling the functions.
-this["eq"] = this["="] = function()
-{
-   return (arguments[0] == arguments[1]) ? T : NIL;
-};
-
-this["eq"].__documentation = "Return T if parameters are equal, NIL otherwise.";
-
-
-this["null"] = function(param)
-{
-   return (param.length != undefined && param.length == 0);
-};
-
-this["null"].__documentation = "Return T if the parameter is NIL, or ()";
-
-
-this["symbolp"] = function(param)
-{
-   var ret = this[param];
-   var context = this;
-   
-   while (ret == undefined && context.parent && context.parent !== this)
-   {
-      context = context.parent;
-      ret = context[param];
-   }
-   
-   return ret != undefined ? T : NIL;
-};
-
-
-this["not"] = function()
-{
-   return (arguments[0] == NIL || arguments[0].length != undefined && arguments[0].length == 0) ? T : NIL;
-};
-
-this["not"].__documentation = "Return the negation of the parameter.";
-
-
-this["cond"] = function()
-{
-   var ret = NIL;
-   
-   for (var i = 0; i < arguments.length; ++i)
-   {
-      var ix = 0;
-      var cond = arguments[i][ix];
-      
-      if (typeof cond == "object" && cond.length)
-      {
-         cond = Lisp.eval.call(this, cond);
-      }
-      else
-      {
-         if (cond == "'")
-         {
-            ++ix;
-            cond = arguments[i][ix];
-         }
-         else
-         {
-            cond = Lisp.eval.call(this, cond);
-         }
-      }
-
-      if (cond != NIL)
-      {
-         var ret = cond;
-         
-         ++ix;
-
-         while (ix < arguments[i].length)
-         {
-            ret = arguments[i][ix];
-            
-            if (typeof ret == "object" && ret.length)
-            {
-               ret = Lisp.eval.call(this, ret);
-            }
-            else if (typeof ret == "string")
-            {
-               if (ret == "'")
-               {
-                  ++ix;
-                  ret = arguments[i][ix];
-               }
-               else
-               {
-                  ret = Lisp.eval.call(this, ret);
-               }
-            }
-            
-            ++ix;
-         }
-
-         return ret;
-      }
-   }
-
-   return NIL;
-};
-
-
-this["and"] = function()
-{
-   for (var i = 0; i < arguments.length; ++i)
-   {
-      var cond = arguments[i];
-      
-      if (typeof cond == "object" && cond.length)
-      {
-         cond = Lisp.eval.call(this, cond);
-      }
-      else 
-      {
-         if (cond == "'")
-         {
-            ++i;
-            cond = arguments[i];
-         }
-         else
-         {
-            cond = Lisp.eval.call(this, cond);
-         }
-      }
-
-      if (Lisp.global["not"].call(this, cond) != NIL)
-      {
-         return cond;
-      }
-   }
-
-   return cond;
-};
-
-
-this["or"] = function()
-{
-   var ret = NIL;
-
-   for (var i = 0; i < arguments.length; ++i)
-   {
-      var cond = arguments[i];
-      
-      if (typeof cond == "object" && cond.length)
-      {
-         cond = Lisp.eval.call(this, cond);
-      }
-      else
-      {
-         if (cond == "'")
-         {
-            ++i;
-            cond = arguments[i];
-         }
-         else
-         {
-            cond = Lisp.eval.call(this, cond);
-         }
-      }
-
-      if (cond != NIL)
-      {
-         return cond;
-      }
-   }
-
-   return NIL;
-};
-
-
-this[">"] = function()
-{
-   return (arguments[0] > arguments[1]) ? T : NIL;
-};
-
-
-this["<"] = function()
-{
-   return (arguments[0] < arguments[1]) ? T : NIL;
-};
-
-
-this["+"] = function()
-{
-   var ret = arguments[0];
-   
-   for (var i = 1; i < arguments.length; ++i)
-   {
-      ret += arguments[i];
-   }
-
-   return ret;
-};
-
-
-this["-"] = function()
-{
-   var ret = arguments[0];
-   
-   for (var i = 1; i < arguments.length; ++i)
-   {
-      ret -= arguments[i];
-   }
-
-   return ret;
-};
-
-
-this["*"] = function(context)
-{
-   var ret = arguments[0];
-   
-   for (var i = 1; i < arguments.length; ++i)
-   {
-      ret *= arguments[i];
-   }
-
-   return ret;
-};
-
-
-this["/"] = function()
-{
-   var ret = arguments[0];
-   
-   for (var i = 1; i < arguments.length; ++i)
-   {
-      ret /= arguments[i];
-   }
-
-   return ret;
-};
-
-
-this["print"] = function()
-{
-   Lisp.onprint && Lisp.onprint(arguments[0]);
-   
-   return arguments[0];
-};
-
-
-this["quote"] = this["'"] = function()
-{
-   return arguments[0];
-};
-
-
-// backquote
-this["`"] = function()
-{
-   var obj = arguments[0];
-   var retobj = obj;
-   
-   if (typeof obj == "object" && obj.length != undefined)
-   {
-      retobj = new Array();
-      var i = 0;
-      var r = 0;
-      
-      while (i < obj.length)
-      {
-         retobj[r] = obj[i];
-         
-         if (typeof obj[i] == "object" && obj[i].length != undefined)
-         {
-            retobj[r] = Lisp.global["'"].call(this, obj[i]);
-         }
-         else
-         {
-            if (obj[i] == "'")
-            {
-               ++i;
-               ++r;
-               retobj[r] = obj[i];
-            }
-            
-            if (obj[i] == ",")
-            {
-               ++i;
-               retobj[r] = Lisp.eval.call(this, obj[i]);
-            }
-         }
-
-         ++i;
-         ++r;
-      }
-   }
-   
-   return retobj;
-};
-
-
-this["setq"] = function()
-{
-   var value = NIL;
-
-   if (arguments[1] == "'")
-   {
-      value = arguments[2];
-   }
-   else
-   {
-      value = Lisp.eval.call(this, arguments[1]);
-   }
-   
-   var context = this;
-   var atom = context[arguments[0]];
-   var setp = false;
-   
-   while (atom == undefined && context.parent && context.parent !== context)
-   {
-      context = context.parent;
-      
-      if (context[arguments[0]] != undefined)
-      {
-         context[arguments[0]] = value;
-         setp = true;
-      }
-   }
-
-   if (!setp)
-   {
-      this[arguments[0]] = value;
-   }
-   
-   return obj = value;
-};
-
-
-this["setf"] = function()
-{
-   return Lisp.global.setq.call(this, arguments);
-   /*
-   var ret = NIL;
-
-   if (arguments[1] == "'")
-   {
-      ret = arguments[2];
-   }
-   else
-   {
-      ret = Lisp.eval.call(this, arguments[1]);
-   }
-   
-   this[arguments[0]] = ret;
-   return ret;
-   */
-}
-
-
-this["make-hash-table"] = function()
-{
-   return new Object();
-};
-
-
-this["gethash"] = function()
-{
-   var hashtable = arguments[1];
-   var entry = arguments[0];
-
-   if (hashtable[entry] == undefined)
-   {
-      hashtable[entry] = new Array();
-   }
-
-   return hashtable[entry];
-};
-
-
-this["sethash"] = function()
-{
-   var hashtable = arguments[1];
-   var entry = arguments[0];
-
-   return hashtable[entry] = arguments[2];
-};
-
-
-this["domget"] = function()
-{
-   if (arguments.length)
-   {
-      var list = arguments[0];
-      var ret = Lisp.eval.call(this, list[0]);
-   
-      for (var i = 1; i < list.length; ++i)
-      {
-         ret = ret[list[i]];
-      }
-      
-      return ret;
-   }
-   
-   return NIL;
-};
-
-// (domset '(object objectChild childChild) value)
-// (domset object value)
-
-this["domset"] = function()
-{
-   if (arguments.length)
-   {
-      var list = arguments[0];
-      var value = arguments[1];
-      var obj = list;
-      
-      if (list.length != undefined)
-      {
-         obj = Lisp.eval.call(this, list[0]);
-         
-         if (list.length)
-         {
-            var i = 1;
-
-            while (i < list.length - 1)
-            {
-               obj = obj[list[i]];
-               ++i;
-            }
-            
-            obj[list[i]] = (value == NIL) ? false : value; 
-         }
-         else
-         {
-            obj = (value == NIL) ? false : value;
-         }
-      }
-      else
-      {
-         obj = (value == NIL) ? false : value;
-      }
-      
-      return value;
-   }
-   
-   return NIL;
-};
-
-this["print"] = function() {
-   post("teste")
-   return NIL;
-}
-
-// (domcall '(document createElement) "a")
-this["domcall"] = function()
-{
-   if (arguments.length)
-   {
-      var list = arguments[0];
-      
-      var call = list[0];
-
-      if (this[call])
-      {
-         call = "this['" + call + "']";
-      }
-   
-      for (var i = 1; i < list.length; ++i)
-      {
-         call = call + "." + list[i];
-      }
-      
-      var args = "(";
-      i = 1;
-      var objs = new Object();
-      var obji = 0;
-      
-      while (i < arguments.length)
-      {
-         if (typeof arguments[i] == "string")
-         {
-            args += '"' + arguments[i] + '"';
-         }
-         /*
-         else if (arguments[i].length)
-         {
-            args += '[' + arguments[i] + ']';
-         }
-         */
-         else if (typeof arguments[i] == "object")
-         {         
-            objs[obji] = arguments[i] == NIL ? false : arguments[i];
-            args += "objs[" + obji + "]";
-            ++obji;
-         }
-         else
-         {
-            args += arguments[i];
-         }
-         
-         ++i;
-         
-         if (i < arguments.length)
-         {
-            args += ", ";
-         }
-      }
-      
-      args += ")";
-      
-      call = call + args;
-      var ret = eval.call(this, call);
-      return ret;
-   }
-   
-   return NIL;
-};
-
-
-this["let"] = function()
-{
-   var ret = NIL;
-   var local = new Array();
-   var bindings = arguments[0];
-  
-   for (var i = 0; i < bindings.length; ++i)
-   {
-      var x = bindings[i][0];
-      var y = bindings[i][1];
-      
-      if (typeof y == "object" && y.length)
-      {
-         y = Lisp.eval.call(this, y);
-      }
-      else if (typeof y == "string")
-      {
-         if (y == "'")
-         {
-            y = bindings[i][2];
-         }
-         else
-         {
-            y = Lisp.eval.call(this, y);
-         }
-      }
-      
-      local[x] = y;
-   }
-   
-   local.parent = this;
-   
-   i = 1;
-
-   while (i < arguments.length)
-   {
-      ret = arguments[i];
-      
-      if (typeof ret == "object" && ret.length)
-      {
-         ret = Lisp.eval.call(local, ret);
-      }
-      else if (typeof ret == "string")
-      {
-         if (ret == "'")
-         {
-            ++i;
-            ret = arguments[i];
-         }
-         else
-         {
-            var context = this;
-            var atom = context[ret];
-            var x = 0;
-            
-            while (atom == undefined && context.parent && context.parent !== context)
-            {
-               context = context.parent;
-               atom = context[ret];
-            }
-            
-            ret = atom;
-         }
-      }
-      
-      ++i;
-   }
-
-   return ret;
-};
-
-
-this["return"] = function()
-{
-   var ret = arguments[0];
-   this["__retval"] = ret;
-   return ret;
-};
-
-
-this["#eval"] = function()
-{
-   return Lisp.eval.apply(this, arguments);
-};
-
-
-this["loop"] = function()
-{
-   var local = new Object();
-   local.parent = this;
-   
-   while (true)
-   {
-      var i = 0;
-      
-      while (i < arguments.length)
-      {
-         ret = Lisp.eval.call(local, arguments[i]);
-         
-         if (local["__retval"]) 
-         {
-            return ret;
-         }
-         
-         ++i;
-      }
-   }   
-   
-   return NIL;
-};
-
-
-this["dotimes"] = function(arglist)
-{
-   var local = new Object();
-   local.parent = this;
-   var __exitcond = Lisp.eval.call(local, arglist[1]);
-   var __j = 1;
-   
-   for (local[arglist[0]] = 0; local[arglist[0]] < __exitcond; ++local[arglist[0]])
-   {
-      __j = 1;
-      
-      while (__j < arguments.length)
-      {
-         ret = Lisp.eval.call(local, arguments[__j]);
-         
-         if (local["__retval"]) 
-         {
-            return ret;
-         }
-         
-         ++__j;
-      }
-   }   
-   
-   return (arglist[2] != undefined) ? Lisp.eval.call(local, arglist[2]) : NIL;
-};
-
-
-this["dolist"] = function(arglist)
-{
-   var local = new Object();
-   local.parent = this;
-   var __valuelist = NIL;
-   var __retpos = 2;
-   
-   if (arglist[1] == "'")
-   {
-      // __valuelist = arglist[2];
-      __valuelist = Lisp.global["'"].call(local, arglist[2]);
-      ++__retpos;
-   }
-   else if (arglist[1] == "`")
-   {
-      __valuelist = Lisp.global["`"].call(local, arglist[2]);
-      ++__retpos;
-   }
-   else
-   {
-      __valuelist = Lisp.eval.call(local, arglist[1]);
-   }
-   
-   var __exitcond = __valuelist.length;
-   // alert(__valuelist);
-   // alert(__exitcond);
-   var __j = 1;
-   
-   for (var __i = 0; __i < __exitcond; ++__i)
-   {
-      local[arglist[0]] = __valuelist[__i];
-      __j = 1;
-      
-      while (__j < arguments.length)
-      {
-         ret = Lisp.eval.call(local, arguments[__j]);
-         
-         if (local["__retval"]) 
-         {
-            return ret;
-         }
-         
-         ++__j;
-      }
-   }   
-   
-   return (arglist[__retpos] != undefined) ? Lisp.eval.call(local, arglist[__retpos]) : NIL;
-};
-
-
-/*
-this["defun"] = function()
-{
-   // arguments[0] = arguments[0].toUpperCase();
-   return Lisp.global["defun-keep-case"].apply(this, arguments);
-};
-
-
-this["defun-keep-case"] = function()
-{
-   var fnName = arguments[0];
-
-   var i = 1;
-   var args = new Array();
-   
-   while (i < arguments.length)
-   {
-      args.push(arguments[i]);
-      ++i;
-   }
-
-   Lisp.global[fnName] = Lisp.global["lambda"].apply(this, args);
-
-   if (typeof arguments[3] == "string")
-   {
-      Lisp.global[fnName].__documentation = arguments[3];
-   }
-   
-   return fnName;
-};
-*/
-
-function defun()
-{
-   var fnName = arguments[0];
-
-   var i = 1;
-   var args = new Array();
-   
-   while (i < arguments.length)
-   {
-      args.push(arguments[i]);
-      ++i;
-   }
-
-   Lisp.global[fnName] = Lisp.global["lambda"].apply(this, args);
-
-   if (typeof arguments[3] == "string")
-   {
-      Lisp.global[fnName].__documentation = arguments[3];
-   }
-   
-   return fnName;
-};
-
-this["lambda"] = function()
-{
-   var i = 0;
-   var parmList = arguments[0];
-   var ins = arguments;
-   var parent = this;
-   var vars = "var local = new Object(); local.parent = parent; ";
-   var varUpdate = "";
-
-   var ret = null;
-
-   var body = "ret = function(";
-   
-   while ( i < parmList.length)
-   {
-      body += parmList[i];
-      vars += " local['" + parmList[i] + "'] = " + parmList[i] + "; ";
-      varUpdate += parmList[i] + " = local['" + parmList[i] + "']; ";
-      ++i;
-      
-      if (i < parmList.length)
-      {
-         body += ", ";
-      }
-   }
-   
-   body += ") {" + vars + 'var ret=null;var i=1;while(i<ins.length){ret=Lisp.eval.call(local, ins[i]);if(local["__retval"]){break;}++i;}return ret;}';
-
-   return eval(body);
-};
-
-this["lambda"].__documentation = "Creates an anonymous function";
-
-
-this["documentation"] = function()
-{
-   var ret = NIL;
-   
-   if (eval("this." + arguments[0].toUpperCase() + ".__documentation") != undefined)
-   {
-      ret = eval("this." + arguments[0].toUpperCase() + ".__documentation");
-   }
-   
-   Lisp.global.print(ret);
-   return ret;
-};
-
-
-this["defmacro"] = function()
-{
-   var i = 0;
-   var fnName = arguments[0];
-   var parmList = arguments[1];
-   var ins = arguments;
-   var parent = this;
-   var vars = "var local = new Object(); local.parent = parent; ";
-   var varUpdate = "";
-
-   var ret = null;
-
-   var body = "ret = function(";
-   
-   while ( i < parmList.length)
-   {
-      body += parmList[i];
-      vars += " local['" + parmList[i] + "'] = " + parmList[i] + "; ";
-      varUpdate += parmList[i] + " = local['" + parmList[i] + "']; ";
-      ++i;
-      
-      if (i < parmList.length)
-      {
-         body += ", ";
-      }
-   }
-   
-   function evalSubst()
-   {
-      var i = 2;
-      var r = 0;
-      
-      var retobj = new Array();
-      
-      while (i < ins.length)
-      {
-         if (ins[i] == "`")
-         {
-            ++i;
-            retobj[r] = Lisp.global["`"].call(this, ins[i]);
-         }
-         else if (ins[i] == "'")
-         {
-            ++i;
-            retobj[r] = Lisp.global["'"].call(this, ins[i]);
-         }
-         else
-         {
-            retobj[r] = Lisp.eval.call(this, ins[i]);
-         }
-         
-         ++i;
-         ++r;
-      }
-
-      return retobj;
-   }
-   
-   body += ") {" + vars + 'var ret=null;var i=0;var forms=evalSubst.call(local);while(i<forms.length){ret=Lisp.eval.call(local, forms[i]);if(local["__retval"]){break;}++i;}return ret;}';
-
-   return this[fnName] = eval(body);
-};
-
-
-this["cons"] = function()
-{
-   var val = arguments[1];
-   var ret = new Array();
-   
-   ret.push(arguments[0]);
-      
-   if (val != NIL)
-   {
-      if (typeof val == "object")
-      {
-         for (var i in val)
-         {
-            ret.push(val[i]);
-         }
-      }
-      else
-      {
-         ret.push(NIL);
-         ret.push(val);
-      }
-   }
-      
-   return ret;
-};
-
-
-this["list"] = function()
-{
-   var ret = new Array();
-   
-   var i = 0;
-   
-   while (i < arguments.length)
-   {
-      ret.push(arguments[i]);
-      ++i;
-   }
-   
-   return ret;
-};
-
-
-this["car"] = function(list)
-{
-   if (list.length != undefined && list.length)
-   {
-      return list[0];
-   }
-   else
-   {
-      return list;
-   }  
-};
-
-
-this["cdr"] = function(list)
-{
-   return list.slice(1);
-};
-
-
-this["atom"] = function(param)
-{
-   var ret = NIL;
-   
-   if (typeof param != "object")
-   {
-      ret = T;
-   }
-   else if (param.length == undefined) // This might not be enough
-   {
-      ret = T;
-   }
-
-   return ret;
-};
-
-
-this["consp"] = function(param)
-{
-   if (param == Lisp.global["NIL"])
-   {
-      return T;
-   }
-   
-   return Lisp.global["listp"].call(this, param);
-};
-
-
-this["listp"] = function(param)
-{
-   var ret = Lisp.global["atom"].call(this, param);
-   return ret == T ? Lisp.global["NIL"] : T;
-};
-
-
-Lisp.specialForms = new Object();
-
-Lisp.specialForms["setq"] = true;
-Lisp.specialForms["let"] = true;
-Lisp.specialForms["let*"] = true;
-Lisp.specialForms["cond"] = true;
-Lisp.specialForms["quote"] = true;
-Lisp.specialForms["defun"] = true;
-Lisp.specialForms["defun-keep-case"] = true;
-Lisp.specialForms["lambda"] = true;
-Lisp.specialForms["defmacro"] = true;
-Lisp.specialForms["progn"] = true;
-Lisp.specialForms["progv"] = true;
-Lisp.specialForms["if"] = true;
-Lisp.specialForms["loop"] = true;
-Lisp.specialForms["dotimes"] = true;
-Lisp.specialForms["dolist"] = true;
-Lisp.specialForms["and"] = true;
-Lisp.specialForms["or"] = true;
-
-
-// Lisp.interpret = function(str)
-function interpret(str)
-{
-   var ret = null;
-   var list = new Array();
-
-   Lisp.tokenize(str, 0, list);
-   
-   for (var i = 0; i < list.length; ++i)
-   {
-      if (list[i] == "`")
-      {
-         ++i;
-         ret = Lisp.global["`"].call(Lisp.global, list[i]);
-      }
-      else if (list[i] == "'")
-      {
-         ++i;
-         ret = Lisp.global["'"].call(Lisp.global, list[i]);
-      }
-      else
-      {
-         ret = Lisp.eval.call(Lisp.global, list[i]);
-      }
-   }
-   
-   return ret;
-};
-
-
-Lisp.tokenize = function(str, i, list)
-{
-   var ix = 0;
-   var comment = false;
-   var string = false;
-   var c = null;
-
-   var tokStart = i;
-
-   function getToken()
-   {
-      var token = null;
-      var n = 0;
-      
-      if (tokStart < i)
-      {
-         token = str.substring(tokStart, i);
-
-         n = parseFloat(token);
-
-         if (isNaN(n))
-         {
-            list[ix++] = token;
-         }
-         else
-         {
-            list[ix++] = n;
-         }
-      }
-   };
-   
-   var fn = new Object();
-   
-   fn["("] = function() 
-   {
-      getToken();
-      list[ix] = new Array();
-      ++i;
-      i = Lisp.tokenize(str, i, list[ix]);
-      ++ix;
-      tokStart = i;
-      return false;
-   };
-   
-   fn[")"] = function() 
-   {
-      getToken();
-      ++i;
-      return i;
-   };
-   
-   fn[";"] = function() 
-   {
-      comment = true;
-      ++i;
-      tokStart = i;
-      return false;
-   };
-   
-   fn["\""] = function() 
-   {
-      list[ix++] = "'";
-      string = true;
-      ++i;
-      tokStart = i;
-      return false;
-   };
-   
-   fn["'"] = fn["`"] = fn[","] = function() 
-   {
-      list[ix++] = str.charAt(i);
-      ++i;
-      tokStart = i;
-      return false;
-   };
-   
-   fn[" "] = fn["\t"] = fn["\r"] = fn["\n"] = function() 
-   {
-      getToken();
-      ++i;
-      tokStart = i;
-      return false;
-   };
-   
-
-   while (i < str.length)
-   {
-      c = str.charAt(i);
-
-      Lisp.showSource(c);
-
-      if (comment)
-      {
-         if (c == "\r" || c == "\n")
-         {
-            comment = false;
-         }
-         
-         ++i;
-         tokStart = i;
-      }
-      else if (string)
-      {
-         if (c == "\"")
-         {
-            string = false;
-            getToken();
-            ++i;
-            tokStart = i;
-         }
-         else
-         {
-            ++i;
-         }
-      }
-      else
-      {
-         if (fn[c])
-         {
-            var ret = fn[c]();
-            
-            if (ret)
-            {
-               return ret;
-            }
-         }
-         else
-         {
-            ++i;
-         }
-      }
-   }
-   
-   getToken();
-   return i;
-};
-
-
-Lisp.global = this;
-
-
-Lisp.eval = function(list, listp)
-{
-   var ret = null;
-   var fnName = null;
-   var fn = null;
-   
-   if (typeof list == "object" && list.length != undefined)
-   {
-      if (typeof list[0] == "string")
-      {
-         fnName = list[0]; //.toUpperCase();
-
-         var context = Lisp.global;
-         fn = context[fnName];
-
-         /*
-         if (fn == undefined)
-         {
-            fn = context[list[0]];
-         }
-         */
-         
-         while (fn == undefined && context.parent && context.parent !== context)
-         {
-            context = context.parent;
-            fn = context[fnName];
-
-            /*
-            if (fn == undefined)
-            {
-               fn = context[list[0]];
-            }
-            */
-         }
-      }
-      else
-      {
-         fn = Lisp.eval.call(this, list[0]);
-      }
-      
-      if (fn)
-      {
-         var args = new Array();
-         list = list.slice(1);
-
-         if (Lisp.specialForms[fnName])
-         {
-            args = list;
-         }
-         else
-         {
-            for (var i = 0; i < list.length; ++i)
-            {
-               if (typeof list[i] == "object" && list[i].length != undefined)
-               {
-                  args.push(Lisp.eval.call(this, list[i]));
-               }
-               else if (typeof list[i] == "string")
-               {
-                  // backquote
-                  if (list[i] == "`")
-                  {
-                     ++i;
-                     args.push(Lisp.global["`"].call(this, list[i]));
-                  }
-                  else if (list[i] == ",")
-                  {
-                     ++i;
-                     args.push(Lisp.eval.call(this, list[i]));
-                  }
-                  // quote
-                  else if (list[i] == "'")
-                  {
-                     ++i;
-                     args.push(list[i]);
-                  }
-                  else
-                  {
-                     var context = this;
-                     var atom = context[list[i]];
-                     
-                     var x = 0;
-                     
-                     while (atom == undefined && context.parent && context.parent !== context)
-                     {
-                        context = context.parent;
-                        atom = context[list[i]];
-                     }
-                  
-                     args.push(atom);
-                  }
-               }
-               else
-               {
-                  args.push(list[i]);
-               }
-            }
-         }
-
-         ret = fn.apply(this, args);
-      }
-      else
-      {
-         throw new Error("undefined function " + fnName);
-      }
-   }
-   else if (typeof list == "string")
-   {
-      var context = this;
-      var atom = context[list];
-      
-      var x = 0;
-      
-      while (atom == undefined && context.parent && context.parent !== context)
-      {
-         context = context.parent;
-         atom = context[list];
-      }
-   
-      ret = atom;
-   }
-   else
-   {
-      ret = list;
-   }
-
-   Lisp.oneval(ret);
-   return ret;
-};
-
-
-Lisp.getXMLHTTP = function()
-{
-   var obj = null;
-
-   try
-   {
-      obj = new ActiveXObject("Msxml2.XMLHTTP");
-   }
-   catch (e)
-   {
-      try
-      {
-         obj = new ActiveXObject("Microsoft.XMLHTTP");
-      } 
-      catch (oc)
-      {
-         obj = null;
-      }
-   }
-   
-   if (!obj && typeof XMLHttpRequest != "undefined") 
-   {
-      obj = new XMLHttpRequest();
-   }
-   
-   return obj;
-}
-
-
-Lisp.frameCount = 1;
-
-
-Lisp.loadSrc = function(url, handler)
-{
-   var xmlHttp = Lisp.getXMLHTTP();
-   
-   if (xmlHttp)
-   {
-      if (xmlHttp.readyState != 0)
-      {
-         xmlHttp.abort()
-      }
-      
-      xmlHttp.open("GET", url, true);
-      
-      xmlHttp.onreadystatechange = function() 
-      {
-         if (handler && xmlHttp.readyState == 4 && xmlHttp.responseText) 
-         {
-            handler(xmlHttp.responseText);
-         }
-      }
-      
-      xmlHttp.send(null)
-   }
-   else
-   {
-      // Code for Opera and other really lame browsers will be added here.
-   }
-}
-
-//////////////////////////////////////////////////////////////
-// max lisp related
-function load(filename) {
-   post("loading file: " + filename)
-   access = "read";
-   typelist = new Array("iLaF" , "maxb" , "TEXT" );
-   f = new File(filename, access, typelist);
-   pgm = f.readstring(65535);
-   interpret(pgm)
-   f.close()
-}
