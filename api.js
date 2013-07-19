@@ -3,7 +3,7 @@
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 // API version
-var _gsVersion = 0.2
+var _gsVersion = 0.3
 
 // This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
@@ -29,6 +29,7 @@ var _gsLastNote = 0
 var _gsLastMode = "ionian"
 
 
+// make phrase
 function mkp(tm, note, velo, dur, start, end) {
    if (__.isUndefined(tm)) {
       tm = [0]
@@ -130,6 +131,21 @@ function mkp(tm, note, velo, dur, start, end) {
    }
 
    return ret
+}
+
+
+// make rhythm
+function mkr(r, velo, start, end) {
+   r = compile_rhythm(r)
+   ret = []
+   for(var k in r) {
+      console.log(k)
+      n = [Number(k)]
+      for(var i=0;i<r[k].length;i++) {
+         ret = ret.concat(mkp(r[k][i], n, velo, _gsClipQtz, start, end))
+      }
+   }
+   return ret;
 }
 
 
@@ -344,6 +360,64 @@ function notelist(note) {
 }
 
 
+function compile_rhythm(r) {
+   co = {}
+
+   for(var k in r) {
+      if ( isnum(k.substring(0,1)) ) {
+         rk = Number(k.substring(0,1) )
+      } else {
+         n = []
+         rendernote(k, n)
+         rk = n[0]
+      }
+
+      var v = r[k]
+
+
+      var rv = []
+      var ae = []
+      co[rk] = rv
+
+      if ( __.isArray(v) ) {
+         for(var i=0;i<v.length;i++) {
+            if (__.isArray(v[i])) {
+               var ae1 = []
+               for(var j=0;j<v[i].length;j++) {
+                  //[ [ "string", "string" ] ]
+                  if (__.isString(v[i][j]) ) {
+                     rv.push(timelist(v[i][j]))
+                  } else {
+                     ae1.push(v[i][j])
+                  } 
+               }
+               if ( ae1.length != 0 ) {
+                  rv.push(ae1)
+               }
+            } else if (__.isString(v[i])) {
+               // [ "string" ]
+               rv.push(timelist(v[i]))
+            } else {
+               // [ 43, 54 ]
+               ae.push(v[i])
+            }
+         }
+      } else if ( __.isString(v) ) {
+         rv.push( timelist(v) )
+      } else {
+         ae.push(v)
+      }
+
+      if ( ae.length != 0 ) {
+         rv.push(ae)
+      }
+   }
+
+
+   return co
+}
+
+
 // extract note
 function extnote(clip) {
    if (clip.length==0)
@@ -366,7 +440,6 @@ function extnote(clip) {
          lasttm = clip[i][0]
       }
    }
-
    if (tmp.length == 1) {
       ret.push(tmp[0])
    } else {
@@ -374,6 +447,7 @@ function extnote(clip) {
    }   
    return ret
 }
+
 
 // extract time
 function exttm(clip) {
@@ -390,6 +464,7 @@ function exttm(clip) {
    }
    return ret
 }
+
 
 // extract rhythm 
 function extrhythm(clip) {
@@ -409,10 +484,18 @@ function extrhythm(clip) {
    return ret
 }
 
+
 // adds the value of 'v' to all the elements in the 'lst' array
 function addl(v, lst) {
    for(var i=0;i<lst.length;i++)
       lst[i] += v
+   return lst
+}
+
+
+function mull(v, lst) {
+   for(var i=0;i<lst.length;i++)
+      lst[i] *= v
    return lst
 }
 

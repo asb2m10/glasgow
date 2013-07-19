@@ -8,7 +8,7 @@ time format
 -----------
 Time format is the same used in Ableton Live: 0.25 is one quarter note (with 4/4). String 
 format can also be used to defined values that are not "floating friendly" like 1.1/3. 
-Events are seperated by the ':' character :
+Events are seperated by the ':' character.
 
     timelist("0.1/3:0.5:1.1/4") == [ 0.33333333333, 0.5, 1.25 ]
 
@@ -45,10 +45,24 @@ If you start a new note with '%', it will reassign the last note and mode select
 
       notelist("C3:C3M:%^37:%<<") == [ 60, [60, 64, 68], [64, 67, 71, 76], [60, 52, 56] ]
 
+rhythm format
+-------------
+Rhythm format is a object that contains notes that are optimized for rhythm events.
+ 
+        
+           | TYhe note to trigger the event, in note format (see ^^^^)
+           |       | The list of triggers, if a string, translate with timelist()
+       {   |       |
+          "C3"   : "0.25:-1",
+          "45"  : [ [ 0.25, -1 ] , "0.1/3:-4" ]
+       }   |        |
+           |        |  If the list it self contains a list, merge it with the main list
+           | If the note it self is a number, consider it a midi note
+
 api 
 ---
 mkp([event timestamp], [list of notes], [list velocity], [list duration]) - Used to make a 
-phrase.
+phrase into a raw clip format.
 
 * It uses the time and note format (in both list of float/int or a string).
 * If all the event have been used for a particular type (timestamp, midinote, velocity or 
@@ -58,13 +72,14 @@ from the global variable _gsClipStart and _gsClipEnd (that gets sets when you us
 [GetClip]  button in M4L). 
 * If in the last item in the timestamp list is smaller than zero or negative, it tells mkp 
 what is the desired loop size. For example a list with [ 0, 0.5, -2 ] will render event like 
-this :
-[0, 0.5, 2, 2.5, 4, 4.5 ...]
+this : [0, 0.5, 2, 2.5, 4, 4.5 ...]
 * If an item duration is set to 0, the duration of the event will be based on the global 
 variable _gsClipQtz. (if the M4L API was available, it we get the value from the quantize 
 size, but right now it is statically set to 0.125)
 * If the item duration is negative, it will set the event duration based on time when the
 next event will be played.
+
+mkr([rhythm format]) - Used to make a rhythmical pattern into a raw clip format.
 
 timelist([string format]) - Used to render a string timelist into a javascript array 
 (see timeformat).
@@ -72,8 +87,11 @@ timelist([string format]) - Used to render a string timelist into a javascript a
 notelist([string format]) - Used to render a string notelist into a javascript array
 (see noteformat).
 
-addl([value to add], [list of numbers]) - add the specified value to all the element in the 
+addl([value to add], [list of numbers]) - add the specified value to all the elements in the 
 list.
+
+mull([value to multiply], [list of numbers]) multiply th specified value to all the element
+in the list.
 
 choose([times], [list of item], [probability]) - chooses an item in the list, for (x) times 
 and  return the result into a new array. You can add the probability parameter to weight 
@@ -83,11 +101,13 @@ exttm(clip) - returns the timestamps (time format) form the current or specified
 
 extnote(clip) - returns the notes (note format) from the current or specified clip.
 
+set_looppoint(start, end) - sets the loop point of the current selected clip in Live.
+
 interface protocol (raw clip format)
 ------------------------------------
 The interface that is used to get or set a Abelton Live clip is a simple array that
-contains the note event. If you don't like the glasgow API, you can make on your own 
-but still use this format to send/receive notes from Live :
+contains the notes event. This is the format that the M4L is expecting to use
+to get or set a Live clip.
 
      [ [ event_timestamp, note_midivalue, notevelo_midivalue, note_duration], ... 
        [ event_timestamp, note_midivalue, notevelo_midivalue, note_duration],
@@ -95,6 +115,9 @@ but still use this format to send/receive notes from Live :
 
 changelog
 ---------
+#### Version 0.3 ####
+- Added rhythm functionality
+
 #### Version 0.2 ####
 - Added chord functionality
 - Added extnote, extnote, exttm, extrhythm to extract values from original clip contents

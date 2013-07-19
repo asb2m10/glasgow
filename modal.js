@@ -15,8 +15,16 @@ modes = {
    // synonyms
 
    "M": [2, 2, 1, 2, 2, 2, 1],
-   "m": [2, 1, 2, 2, 2, 2, 1]
+   "m": [2, 1, 2, 2, 2, 1, 2]
 }
+
+
+rhythms = {
+   "r4/4" : "0:0.25:-1",
+   "r8/4" : "0:0.125:-0.5",  
+   "transeuropa-bd" :  "0:0.1/16:0.8/16:0.10/16:-1"
+}
+
 
 // degree(degree, mode, voices, resticted_class)
 function degree(d, m, v, r) {
@@ -65,6 +73,7 @@ function degree(d, m, v, r) {
    }
    return ret;
 }
+
 
 function inverter(def, lvl) {
    if ( lvl == 0 )

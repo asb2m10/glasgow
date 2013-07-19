@@ -5,10 +5,12 @@
 var assert = require("assert")
 
 function arrays_equal(a,b) { 
+
 	if ( !(__.isArray(a) && __.isArray(b)) ) {
 		console.log(a, "??", b)
 		return false
 	}
+
 	var ret = !(a<b || b<a)
 	if ( ret )
 		return ret
@@ -93,6 +95,38 @@ describe('mkp', function() {
 	})
 })
 
+
+describe('compile_rhythm', function() {
+	it('should return notes with rhythms', function() {
+		var x = compile_rhythm({ 
+		 	"C3" : [ ["0:1:-3"] ],
+		 	"C#3" : "0:1:-3",
+		 	"D3" : [ "0:1:-3" ],
+		 	"D#3" : [ 0, 1, -3 ],
+		 	"E3" : [ [ 0, 1, -3] ]
+		})
+		assert.ok(arrays_equal(x["60"][0], [0, 1, -3]))
+		assert.ok(arrays_equal(x["61"][0], [0, 1, -3]))
+		assert.ok(arrays_equal(x["62"][0], [0, 1, -3]))	
+		assert.ok(arrays_equal(x["63"][0], [0, 1, -3]))	
+		assert.ok(arrays_equal(x["64"][0], [0, 1, -3]))	
+
+	})
+})
+
+describe('mkr', function() {
+	it('should return the correct rhythm', function() {
+		var x = mkr({ 
+			"C3" : [ ["0:1:-3"] ] 
+		})
+		//console.log("\n")
+		//console.log(x)
+
+
+		console.log(x)
+		//assert.ok(array_equal(x["60"][0], [0, 1, -3]))
+	})
+})
 
 describe('choose', function() {
 	it('should return 4 different values', function() {
