@@ -29,7 +29,7 @@ var _gsLastNote = 0
 var _gsLastMode = "ionian"
 
 
-// make phrase
+// make musical phrase
 function mkp(tm, note, velo, dur, start, end) {
    if (__.isUndefined(tm)) {
       tm = [0]
@@ -149,6 +149,7 @@ function mkr(r, velo, start, end) {
 }
 
 
+// transform timelist string format into array of floats
 function timelist(tm) {
    //glasgow_info("time: " + tm)
    var tms = tm.split(":")
@@ -183,7 +184,7 @@ function ischar(chr) {
 }
 
 
-// render note (or chord)
+// render note (or chord from string)
 function rendernote(str, chord) {
    str = str.trim().split('')
    str.push(' ')
@@ -341,6 +342,7 @@ function rendernote(str, chord) {
 }
 
 
+// transform notelist string format into array of int (midi note)
 function notelist(note) {
    var notes = note.split(":")
    var ret = []
@@ -373,8 +375,6 @@ function compile_rhythm(r) {
       }
 
       var v = r[k]
-
-
       var rv = []
       var ae = []
       co[rk] = rv
@@ -493,6 +493,7 @@ function addl(v, lst) {
 }
 
 
+// multiply the value of 'v' to all the elements in the 'lst' array
 function mull(v, lst) {
    for(var i=0;i<lst.length;i++)
       lst[i] *= v
@@ -525,9 +526,8 @@ function choose(times, lst, prob) {
 }
 
 
-
 /**
- * Iterators are use to loop over a list.
+ * Iterators are use to iterate over a list. It is a object and they 
  * 
  * Iterator(lst) - constructor, takes a list
  * Iterator.next - returns the next element, null if N/A
@@ -587,7 +587,6 @@ IterLoopTm.prototype.next = function () {
    }
    return this.lst[this.i] + (this.looped * this.end)
 }
-
 IterLoopTm.prototype.peek = function () {
    i2 = this.i + 1
    if (i2 < this.lst.length) {
@@ -654,7 +653,7 @@ function render_array(a) {
 }
 
 // ----------------------------------------------------------------------------
-// the modal (music theory) stuff
+// the music theory stuff
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 modes = {
@@ -1958,6 +1957,67 @@ function inverter(def, lvl) {
   });
 
 }).call(this);
+/*Array.prototype.rotate = function(n) {
+    return this.slice(n, this.length).concat(this.slice(0, n));
+}*/
+
+//
+function ggr_magneto(unit, swing, size, pow, repeat) {
+	if (__.isUndefined(unit))
+		unit = 0.125
+
+	if (__.isUndefined(swing))
+		swing = 0
+
+	if (__.isUndefined(size))
+		size = 8
+
+	if (__.isUndefined(pow))
+		pow = 0.8
+
+	if (__.isUndefined(repeat))
+		repeat = 1
+
+	var squ = Math.round(Math.sqrt(size))+1
+	var ruler = []
+
+	// build the ruler
+	ruler.push(squ)
+	for(var i=1;i<size;i++) {
+		w = i
+		for(var j=0;j<32;j++) {
+			if ( ( w & 1 ) == 1 )
+				break
+			w = w >>> 1
+		}
+		ruler.push(j)		
+	}
+
+	if ( swing > 0 ) {
+		// add the swing
+		if ( swing > squ ) 
+			swing = squ
+
+		swing = Math.round(size/swing+1)
+		if ( swing > 0 )
+			ruler.rotate(swing)
+	}
+
+	for(var i=0;i<ruler.length;i++) {
+		ruler[i] = (ruler[i] / squ) * pow
+	}
+
+	var ret = []
+	for(var i=0;i<size*repeat;i++) {
+		var x = ruler[i%ruler.length]
+		if ( x * Math.random() > 1 ) {
+			ret.push(unit * i)
+		}
+	}
+
+	ret.push((i*unit) * -1)
+	return ret
+}
 // ----------------------------------------------------------------------------
 // mocha tests
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0

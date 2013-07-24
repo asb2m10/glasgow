@@ -1,11 +1,13 @@
-glasgow.js: glasgow-device.js max.js api.js music.js vendor/underscore.js
+all: glasgow.js
+
+glasgow.js: glasgow-device.js max.js api.js music.js gen.js vendor/underscore.js
 	cat glasgow-device.js max.js api.js music.js vendor/underscore.js > build/glasgow.js
 
-modulr.js: modulr-device.js max.js api.js music.js vendor/underscore.js
+modulr.js: modulr-device.js max.js api.js music.js gen.js vendor/underscore.js
 	cat modulr-device.js max.js api.js music.js vendor/underscore.js > build/modulr.js
 	
 test:
-	cat api.js music.js vendor/underscore.js test.js node-rt.js > build/mocha-test.js
+	cat api.js music.js vendor/underscore.js gen.js test.js node-rt.js > build/mocha-test.js
 	mocha build/mocha-test.js
 
 test-lisp:

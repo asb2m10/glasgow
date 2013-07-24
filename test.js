@@ -122,8 +122,6 @@ describe('mkr', function() {
 		//console.log("\n")
 		//console.log(x)
 
-
-		console.log(x)
 		//assert.ok(array_equal(x["60"][0], [0, 1, -3]))
 	})
 })

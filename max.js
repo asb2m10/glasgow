@@ -127,6 +127,6 @@ function set_looppoint(start, end) {
    _gsClipEnd = end
 }
 
-// hack to support underscore in max/msp :(
+// hack to support underscore in max/msp and node.js :(
 __ = _
 

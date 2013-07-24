@@ -1,8 +1,8 @@
-Array.prototype.rotate = function(n) {
+/*Array.prototype.rotate = function(n) {
     return this.slice(n, this.length).concat(this.slice(0, n));
-}
+}*/
 
-
+//
 function ggr_magneto(unit, swing, size, pow, repeat) {
 	if (__.isUndefined(unit))
 		unit = 0.125
@@ -41,7 +41,7 @@ function ggr_magneto(unit, swing, size, pow, repeat) {
 
 		swing = Math.round(size/swing+1)
 		if ( swing > 0 )
-			ruler.rotate(swing)
+			ruler = ruler.slice(swing, ruler.length).concat(ruler.slice(0, swing));
 	}
 
 	for(var i=0;i<ruler.length;i++) {

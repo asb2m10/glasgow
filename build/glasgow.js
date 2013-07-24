@@ -1,12 +1,10 @@
 // ----------------------------------------------------------------------------
-// the Max/MSP related interface
+// the Max/MSP device file
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 
 inlets = 1
 outlets = 2
-
-var undo_buffer = []
 
 // the value of code window in max
 var current_code = ""
@@ -31,6 +29,7 @@ function GetClip() {
 
    if ( _.isString(content) ) {
       glasgow_error(content)
+      return
    }
 
    _gsLastGetClip = content
@@ -108,14 +107,7 @@ function Evaluate() {
 // replace the content of the current selected clip with the content that was in the 
 // clip before "PutClip" was called.
 function Undo() {
-   if (undo_buffer.length > 0) {
-      var lastclip = undo_buffer.pop()
-      lastclip = validateclip_content(lastclip)
-      lastclip = putclip_content(lastclip)
-      glasgow_info("Undo successful")
-   } else {
-      glasgow_info("No content in undo buffer")
-   }
+   glasgow_info(undo_putclip())
 }
 
 
@@ -141,7 +133,62 @@ function LoadLib() {
    f.close()  */
 }
 
-// NOT CALLED BY MAX
+
+function evalcode() {
+   fillGlobalVar()
+   try {
+      /* undocumented feature, if it starts with ( it is considered a
+         lisp snippet 
+      if ( current_code.charAt(0) == '(') {
+         glasgow_info("using lisp engine to parse snippet")
+         out = interpret(current_code)
+      } else {*/
+         out = eval(current_code)
+      /*}*/
+   } catch (err) {
+      glasgow_error(String(err))
+      out = null
+   }
+   return out
+}
+
+
+function glasgow_info(msg) {
+   post(msg + "\n")
+   outlet(0, "textcolor", "0", "0", "0", "1")
+   outlet(0, "set", msg)
+}
+
+
+function glasgow_error(msg) {
+   error(msg + "\n")
+   outlet(0, "textcolor", "255", "0", "0", "1")
+   outlet(0, "set", msg)
+}
+
+
+function flatten_event(lst) {
+   var ret = new Array()
+   for(var i=0;i<lst.length;i++) {
+      if ( __.isArray(lst[i]) ) {
+
+         if ( __.isArray(lst[i][0]) ) {
+            for(var j=0;j<lst[i].length;j++) {
+               ret.push(lst[i][j])
+            }
+         } else {
+            ret.push(lst[i])
+         }
+      } 
+   }
+   return ret;
+}
+// ----------------------------------------------------------------------------
+// the Max/MSP related interface
+// (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
+//
+
+var undo_buffer = []
 
 function getclip_content() {
    fillGlobalVar()
@@ -229,25 +276,16 @@ function putclip_content(clip) {
 }
 
 
-function evalcode() {
-   fillGlobalVar()
-   try {
-      /* undocumented feature, if it starts with ( it is considered a
-         lisp snippet 
-      if ( current_code.charAt(0) == '(') {
-         glasgow_info("using lisp engine to parse snippet")
-         out = interpret(current_code)
-      } else {*/
-         out = eval(current_code)
-      /*}*/
-   } catch (err) {
-      glasgow_error(String(err))
-      out = null
+function undo_putclip() {
+   if (undo_buffer.length > 0) {
+      var lastclip = undo_buffer.pop()
+      lastclip = validateclip_content(lastclip)
+      lastclip = putclip_content(lastclip)
+      return "Undo successful"
+   } else {
+      return "No content in undo buffer"
    }
-   return out
 }
-
-
 
 
 function fillGlobalVar() {
@@ -265,39 +303,16 @@ function fillGlobalVar() {
 }
 
 
-function glasgow_info(msg) {
-   post(msg + "\n")
-   outlet(0, "textcolor", "0", "0", "0", "1")
-   outlet(0, "set", msg)
+function set_looppoint(start, end) {
+   api = new LiveAPI("live_set view detail_clip");
+   api.set("loop_start", [ start ])
+   api.set("loop_end", [ end ])
+
+   _gsClipStart = start
+   _gsClipEnd = end
 }
 
-
-function glasgow_error(msg) {
-   error(msg + "\n")
-   outlet(0, "textcolor", "255", "0", "0", "1")
-   outlet(0, "set", msg)
-}
-
-
-
-function flatten_event(lst) {
-   var ret = new Array()
-   for(var i=0;i<lst.length;i++) {
-      if ( __.isArray(lst[i]) ) {
-
-         if ( __.isArray(lst[i][0]) ) {
-            for(var j=0;j<lst[i].length;j++) {
-               ret.push(lst[i][j])
-            }
-         } else {
-            ret.push(lst[i])
-         }
-      } 
-   }
-   return ret;
-}
-
-// hack to support underscore in max/msp :(
+// hack to support underscore in max/msp and node.js :(
 __ = _
 
 // ----------------------------------------------------------------------------
@@ -305,7 +320,7 @@ __ = _
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 // API version
-var _gsVersion = 0.2
+var _gsVersion = 0.3
 
 // This is set by the Max plugin to inform the Live clip start loop point.
 var _gsClipStart = 0
@@ -331,6 +346,7 @@ var _gsLastNote = 0
 var _gsLastMode = "ionian"
 
 
+// make musical phrase
 function mkp(tm, note, velo, dur, start, end) {
    if (__.isUndefined(tm)) {
       tm = [0]
@@ -435,6 +451,22 @@ function mkp(tm, note, velo, dur, start, end) {
 }
 
 
+// make rhythm
+function mkr(r, velo, start, end) {
+   r = compile_rhythm(r)
+   ret = []
+   for(var k in r) {
+      console.log(k)
+      n = [Number(k)]
+      for(var i=0;i<r[k].length;i++) {
+         ret = ret.concat(mkp(r[k][i], n, velo, _gsClipQtz, start, end))
+      }
+   }
+   return ret;
+}
+
+
+// transform timelist string format into array of floats
 function timelist(tm) {
    //glasgow_info("time: " + tm)
    var tms = tm.split(":")
@@ -469,7 +501,7 @@ function ischar(chr) {
 }
 
 
-// render note (or chord)
+// render note (or chord from string)
 function rendernote(str, chord) {
    str = str.trim().split('')
    str.push(' ')
@@ -627,6 +659,7 @@ function rendernote(str, chord) {
 }
 
 
+// transform notelist string format into array of int (midi note)
 function notelist(note) {
    var notes = note.split(":")
    var ret = []
@@ -643,6 +676,62 @@ function notelist(note) {
          ret.push(chord)
    }
    return ret
+}
+
+
+function compile_rhythm(r) {
+   co = {}
+
+   for(var k in r) {
+      if ( isnum(k.substring(0,1)) ) {
+         rk = Number(k.substring(0,1) )
+      } else {
+         n = []
+         rendernote(k, n)
+         rk = n[0]
+      }
+
+      var v = r[k]
+      var rv = []
+      var ae = []
+      co[rk] = rv
+
+      if ( __.isArray(v) ) {
+         for(var i=0;i<v.length;i++) {
+            if (__.isArray(v[i])) {
+               var ae1 = []
+               for(var j=0;j<v[i].length;j++) {
+                  //[ [ "string", "string" ] ]
+                  if (__.isString(v[i][j]) ) {
+                     rv.push(timelist(v[i][j]))
+                  } else {
+                     ae1.push(v[i][j])
+                  } 
+               }
+               if ( ae1.length != 0 ) {
+                  rv.push(ae1)
+               }
+            } else if (__.isString(v[i])) {
+               // [ "string" ]
+               rv.push(timelist(v[i]))
+            } else {
+               // [ 43, 54 ]
+               ae.push(v[i])
+            }
+         }
+      } else if ( __.isString(v) ) {
+         rv.push( timelist(v) )
+      } else {
+         ae.push(v)
+      }
+
+      if ( ae.length != 0 ) {
+         rv.push(ae)
+      }
+   }
+
+
+   return co
 }
 
 
@@ -668,7 +757,6 @@ function extnote(clip) {
          lasttm = clip[i][0]
       }
    }
-
    if (tmp.length == 1) {
       ret.push(tmp[0])
    } else {
@@ -676,6 +764,7 @@ function extnote(clip) {
    }   
    return ret
 }
+
 
 // extract time
 function exttm(clip) {
@@ -692,6 +781,7 @@ function exttm(clip) {
    }
    return ret
 }
+
 
 // extract rhythm 
 function extrhythm(clip) {
@@ -711,10 +801,19 @@ function extrhythm(clip) {
    return ret
 }
 
+
 // adds the value of 'v' to all the elements in the 'lst' array
 function addl(v, lst) {
    for(var i=0;i<lst.length;i++)
       lst[i] += v
+   return lst
+}
+
+
+// multiply the value of 'v' to all the elements in the 'lst' array
+function mull(v, lst) {
+   for(var i=0;i<lst.length;i++)
+      lst[i] *= v
    return lst
 }
 
@@ -744,9 +843,8 @@ function choose(times, lst, prob) {
 }
 
 
-
 /**
- * Iterators are use to loop over a list.
+ * Iterators are use to iterate over a list. It is a object and they 
  * 
  * Iterator(lst) - constructor, takes a list
  * Iterator.next - returns the next element, null if N/A
@@ -806,7 +904,6 @@ IterLoopTm.prototype.next = function () {
    }
    return this.lst[this.i] + (this.looped * this.end)
 }
-
 IterLoopTm.prototype.peek = function () {
    i2 = this.i + 1
    if (i2 < this.lst.length) {
@@ -873,7 +970,7 @@ function render_array(a) {
 }
 
 // ----------------------------------------------------------------------------
-// the modal (music theory) stuff
+// the music theory stuff
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 modes = {
@@ -889,8 +986,16 @@ modes = {
    // synonyms
 
    "M": [2, 2, 1, 2, 2, 2, 1],
-   "m": [2, 1, 2, 2, 2, 2, 1]
+   "m": [2, 1, 2, 2, 2, 1, 2]
 }
+
+
+rhythms = {
+   "r4/4" : "0:0.25:-1",
+   "r8/4" : "0:0.125:-0.5",  
+   "transeuropa-bd" :  "0:0.1/16:0.8/16:0.10/16:-1"
+}
+
 
 // degree(degree, mode, voices, resticted_class)
 function degree(d, m, v, r) {
@@ -939,6 +1044,7 @@ function degree(d, m, v, r) {
    }
    return ret;
 }
+
 
 function inverter(def, lvl) {
    if ( lvl == 0 )

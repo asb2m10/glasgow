@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------
-// the modal (music theory) stuff
+// the music theory stuff
 // (c) Pascal Gauthier 2013, under the CC BY-SA 3.0
 //
 modes = {

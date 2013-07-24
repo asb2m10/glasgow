@@ -29,7 +29,7 @@ var _gsLastNote = 0
 var _gsLastMode = "ionian"
 
 
-// make phrase
+// make musical phrase
 function mkp(tm, note, velo, dur, start, end) {
    if (__.isUndefined(tm)) {
       tm = [0]
@@ -149,6 +149,7 @@ function mkr(r, velo, start, end) {
 }
 
 
+// transform timelist string format into array of floats
 function timelist(tm) {
    //glasgow_info("time: " + tm)
    var tms = tm.split(":")
@@ -183,7 +184,7 @@ function ischar(chr) {
 }
 
 
-// render note (or chord)
+// render note (or chord from string)
 function rendernote(str, chord) {
    str = str.trim().split('')
    str.push(' ')
@@ -341,6 +342,7 @@ function rendernote(str, chord) {
 }
 
 
+// transform notelist string format into array of int (midi note)
 function notelist(note) {
    var notes = note.split(":")
    var ret = []
@@ -373,8 +375,6 @@ function compile_rhythm(r) {
       }
 
       var v = r[k]
-
-
       var rv = []
       var ae = []
       co[rk] = rv
@@ -493,6 +493,7 @@ function addl(v, lst) {
 }
 
 
+// multiply the value of 'v' to all the elements in the 'lst' array
 function mull(v, lst) {
    for(var i=0;i<lst.length;i++)
       lst[i] *= v
@@ -525,9 +526,8 @@ function choose(times, lst, prob) {
 }
 
 
-
 /**
- * Iterators are use to loop over a list.
+ * Iterators are use to iterate over a list. It is a object and they 
  * 
  * Iterator(lst) - constructor, takes a list
  * Iterator.next - returns the next element, null if N/A
@@ -587,7 +587,6 @@ IterLoopTm.prototype.next = function () {
    }
    return this.lst[this.i] + (this.looped * this.end)
 }
-
 IterLoopTm.prototype.peek = function () {
    i2 = this.i + 1
    if (i2 < this.lst.length) {
