@@ -19,9 +19,6 @@ var _gsClipQtz = 0.125
 // into Live, each event will be multipled by this value. 
 var _gsTmRatio = 1
 
-// The last value what GetClip returned
-var _gsLastGetClip = []
-
 // The last selected note
 var _gsLastNote = 0
 
@@ -139,13 +136,32 @@ function mkr(r, velo, start, end) {
    r = compile_rhythm(r)
    ret = []
    for(var k in r) {
-      console.log(k)
       n = [Number(k)]
       for(var i=0;i<r[k].length;i++) {
          ret = ret.concat(mkp(r[k][i], n, velo, _gsClipQtz, start, end))
       }
    }
    return ret;
+}
+
+
+// replace rhythm: takes the current clip value rhythm and only replace the notes 
+// that are used in the new rhythm.
+function rmrk(r, velo, start, end, raw_clip) {
+   if ( __.isUndefined(raw_clip) ) {
+      if ( undo_buffer.length > 0 )
+         raw_clip = undo_buffer[under_buffer.length-1]
+      else
+         raw_clip = []
+   }
+   target = extrhythm(raw_clip)
+   r = compile_rhythm(r)
+
+   for(var k in r) {
+      target[k] = r[k]
+   }
+
+   return mkr(target, velo, start, end)
 }
 
 
@@ -413,7 +429,6 @@ function compile_rhythm(r) {
       }
    }
 
-
    return co
 }
 
@@ -469,16 +484,16 @@ function exttm(clip) {
 // extract rhythm 
 function extrhythm(clip) {
    if(clip.length==0)
-      return []
+      return {}
 
    ret = {}
    for(i=0;i<clip.length;i++) {
       tm = clip[i][0]
       nt = clip[i][1]
-      if (__.isUndefined(ret[tm])) { 
-         ret[tm] = [ nt ]
+      if (__.isUndefined(ret[nt])) { 
+         ret[nt] = [ tm ]
       } else {
-         ret[tm].push(nt)
+         ret[nt].push(tm)
       }
    }
    return ret
@@ -2000,7 +2015,7 @@ function ggr_magneto(unit, swing, size, pow, repeat) {
 
 		swing = Math.round(size/swing+1)
 		if ( swing > 0 )
-			ruler.rotate(swing)
+			ruler = ruler.slice(swing, ruler.length).concat(ruler.slice(0, swing));
 	}
 
 	for(var i=0;i<ruler.length;i++) {
@@ -2017,6 +2032,10 @@ function ggr_magneto(unit, swing, size, pow, repeat) {
 
 	ret.push((i*unit) * -1)
 	return ret
+}
+
+function gem_steal() {
+	
 }
 // ----------------------------------------------------------------------------
 // mocha tests
@@ -2142,8 +2161,6 @@ describe('mkr', function() {
 		//console.log("\n")
 		//console.log(x)
 
-
-		console.log(x)
 		//assert.ok(array_equal(x["60"][0], [0, 1, -3]))
 	})
 })

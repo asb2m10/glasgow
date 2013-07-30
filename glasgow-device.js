@@ -9,6 +9,9 @@ outlets = 2
 // the value of code window in max
 var current_code = ""
 
+// The last value what GetClip returned
+var _gsLastGetClip = []
+
 // THIS PORTION IS CALLED BY MAX (with the first letter of the function in upper case)
 
 // called by max to update the textedit containing the code value

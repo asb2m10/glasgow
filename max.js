@@ -79,7 +79,19 @@ function validateclip_content(clip) {
 
 
 // Put the array content into the clip; must be used with the validateclip_content
-function putclip_content(clip) {
+// You can use ignore_undo to avoid putting current clip content into undo buffer
+function putclip_content(clip, ignore_undo) {
+   if ( __.isUndefined(ignore_undo) ) {
+      ignore_undo = false
+   }
+
+   if ( ! ignore_undo ) {
+      if (undo_buffer.length > 30)
+         undo_buffer.shift()
+      }
+     undo_buffer.push(getclip_content())
+   }
+
    var api = new LiveAPI("live_set view detail_clip");
    api.call("select_all_notes");
    api.call("replace_selected_notes");
@@ -125,6 +137,15 @@ function set_looppoint(start, end) {
 
    _gsClipStart = start
    _gsClipEnd = end
+}
+
+
+function get_undocontent() {
+   if ( undo_buffer.length > 0 ) {
+      return undo_buffer[undo_buffer.length-1]
+   } else {
+      return []
+   }
 }
 
 // hack to support underscore in max/msp and node.js :(

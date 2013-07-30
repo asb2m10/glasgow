@@ -59,3 +59,7 @@ function ggr_magneto(unit, swing, size, pow, repeat) {
 	ret.push((i*unit) * -1)
 	return ret
 }
+
+function gem_steal() {
+	
+}
