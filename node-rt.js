@@ -11,3 +11,5 @@ function glasgow_error(msg) {
 	console.error(msg)
 }
 
+// hack to support underscore in max/msp and node.js :(
+__ = _

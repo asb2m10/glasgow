@@ -1,8 +1,13 @@
 glasgow
 =======
 
-Glasgow is a tool to manipulate Ableton Live clips by using Javascript (with Max For Live).
+Glasgow is a tool to manipulate Ableton Live clips by using Javascript (with Max For Live). 
+While this plugin is a M4L midi effect, it doesn't change the midi stream but rather the user
+selected Live midi clip.
 
+The device 'code' prompt is used to write Javascript within Live but glasgow can also be used as a
+'Live midi framework' for M4L developers to modify midi clip events easily. See the Makefile on how 
+you can write your own M4L device using the 'glasgow' framework.
 
 time format
 -----------
@@ -14,7 +19,7 @@ Events are seperated by the ':' character.
 
 note format
 -----------
-Note value are analogous to midi notes. You can use notelist() helper to parse a string that 
+Note values are analogous to midi notes. You can use notelist() helper to parse a string that 
 will render the values into a javascript array. The string format: the lowest midi note is 
 C-2 (C minus 2; the midi note 0) and the highest G8. Sharp values contains the '#' between 
 the note name and the octave: C#1. Like the time format, events are separated by the ':'
@@ -117,6 +122,8 @@ changelog
 ---------
 #### Version 0.3 ####
 - Added rhythm functionality
+- Upgraded to Underscore 1.8.3
+- Tested with Live 9.5 and Max 7.0.6
 
 #### Version 0.2 ####
 - Added chord functionality
@@ -130,12 +137,10 @@ todo
 - [ ] nodify the max part of the code (make modules and explicitly export modules)
 - [ ] write our own TextEdit Max control that doesn't escapes symbols or try to use
 Text
-- [ ] integrate the Lisp engine to the interpret code window
 
 licence
 -------
 Glasgow is released upon the Attribution-ShareAlike 3.0 Unported licence and uses the 
 following code :
 * underscore.js by Jeremy Ashkenas, MIT licence http://underscorejs.org/
-* parks-lisp by Paul M. Parks, BSD licence http://www.parkscomputing.com/lisptest.html
 

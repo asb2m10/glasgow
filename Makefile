@@ -1,7 +1,7 @@
 all: glasgow.js
 
 glasgow.js: glasgow-device.js max.js api.js music.js gen.js vendor/underscore.js
-	cat glasgow-device.js max.js api.js music.js vendor/underscore.js > build/glasgow.js
+	cat glasgow-device.js api.js music.js vendor/underscore.js max.js > build/glasgow.js
 
 modulr.js: modulr-device.js max.js api.js music.js gen.js vendor/underscore.js
 	cat modulr-device.js max.js api.js music.js vendor/underscore.js > build/modulr.js

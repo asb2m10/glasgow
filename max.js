@@ -5,6 +5,8 @@
 
 var undo_buffer = []
 
+var _gsCurrentClip = null
+
 function getclip_content() {
    fillGlobalVar()
    var api = new LiveAPI("live_set view detail_clip");
@@ -77,29 +79,23 @@ function validateclip_content(clip) {
    return ret
 }
 
-
-// Put the array content into the clip; must be used with the validateclip_content
-// You can use ignore_undo to avoid putting current clip content into undo buffer
 function putclip_content(clip, ignore_undo) {
    if ( __.isUndefined(ignore_undo) ) {
-      ignore_undo = false
-   }
-
-   if ( ! ignore_undo ) {
-      if (undo_buffer.length > 30)
-         undo_buffer.shift()
+      if (undo_buffer.length > 30) {
+         undo_buffer.shift();
       }
-     undo_buffer.push(getclip_content())
+      undo_buffer.push(getCurrentClip());
+      _gsCurrentClip = null;
    }
 
    var api = new LiveAPI("live_set view detail_clip");
    api.call("select_all_notes");
    api.call("replace_selected_notes");
-   api.call("notes", clip.length)
+   api.call("notes", clip.length);
    for (i = 0; i < clip.length; i++) {
-      api.call(clip[i])
+      api.call(clip[i]);
    }
-   return api.call("done")
+   api.call("done");
 }
 
 
@@ -107,7 +103,7 @@ function undo_putclip() {
    if (undo_buffer.length > 0) {
       var lastclip = undo_buffer.pop()
       lastclip = validateclip_content(lastclip)
-      lastclip = putclip_content(lastclip)
+      lastclip = putclip_content(lastclip, true)
       return "Undo successful"
    } else {
       return "No content in undo buffer"
@@ -140,14 +136,17 @@ function set_looppoint(start, end) {
 }
 
 
-function get_undocontent() {
-   if ( undo_buffer.length > 0 ) {
-      return undo_buffer[undo_buffer.length-1]
-   } else {
-      return []
-   }
+function getCurrentClip() {
+   if ( _gsCurrentClip == null) 
+      _gsCurrentClip = getclip_content()
+   return _gsCurrentClip
 }
 
 // hack to support underscore in max/msp and node.js :(
 __ = _
+
+function loadbang() {
+   // tell the user that the hole thing worked....
+   glasgow_info("Glasgow framework loaded sucessfully")   
+}
 
