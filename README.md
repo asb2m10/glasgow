@@ -110,7 +110,7 @@ set_looppoint(start, end) - sets the loop point of the current selected clip in 
 
 interface protocol (raw clip format)
 ------------------------------------
-The interface that is used to get or set a Abelton Live clip is a simple array that
+The interface that is used to get or set a Ableton Live clip is a simple array that
 contains the notes event. This is the format that the M4L is expecting to use
 to get or set a Live clip.
 
